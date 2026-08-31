@@ -145,3 +145,28 @@ Short turns (suffix under the threshold) skip steps 1–3: the session's Mac hit
 **When DV separation loses:** per-cycle RTT jitter directly widens inter-token-latency tails (on-box never pays it); lossless stochastic sampling across the wire requires shipping truncated q-distributions or accepting greedy/approximate acceptance; and if on-box MTP already delivers 2×+ with heads the checkpoint ships for free, a network drafter must beat that *after* subtracting its tail risk. Measure `acceptance × cycles/s` against the on-box baseline per model — same discipline as every other threshold in this design.
 
 Build-list addition: the draft service (SAM over the block store's token streams + optional batched small-LM tier + the per-cycle async RPC in the engines) — small; the corpus indexing rides on data the store already has.
+
+---
+
+## 9. Addendum: when the Spark plane grows to *tens* of boxes
+
+"Some" Sparks were a garnish on a Mac fleet. **Tens of Sparks are a pod**, and the design re-balances:
+
+**Buy the switch first.** Each Spark has 2× 200 Gb/s ConnectX-7 QSFP ports. Without a switch, tens of Sparks are isolated pairs; with one 200/400 GbE leaf switch (~32 QSFP ports), they become an any-to-any RDMA fabric at ~25 GB/s per link — the "Mooncake condition" fully satisfied, on Linux, with the entire datacenter stack (SGLang + sgl-model-gateway, Dynamo, NIXL, Mooncake TE, NVFP4 models) running natively. The single highest-leverage line item in the whole fleet.
+
+**The simplification dividend**: with a real Spark pod, the cross-vendor machinery (oMLX-on-CUDA, MLX↔Metal KV portability, CUDA→Metal token-identity validation) stops being load-bearing. Run the standard CUDA stack end-to-end on the pod; keep the Mac plane as a *separate* product tier, not a co-equal half of one model's serving path.
+
+**Pod partition for ~24 Sparks** (adjust to taste; every box is 128 GB / 273 GB/s / ~1 PFLOP FP4 / 240 W — ~6 kW total):
+
+| Boxes | Role | Notes |
+|---|---|---|
+| 12–16 | Mid-MoE serving pool (A3B–A10B class @ NVFP4) | P/D-disaggregated pairs over the switch (Dynamo/NIXL, ~80 ms KV handoff) or mixed replicas; ~200–300 tok/s aggregate decode per box at batch (bandwidth-bound: ~0.9 GB active/token at FP4), prefill in the tens of K tok/s per box (FP4 tensor cores) |
+| 4–8 | Frontier island(s) | 4 boxes = 512 GB = 671B-class @ 4-bit, PP4, ~13 tok/s/user, batch to ~50–100 aggregate; two islands from 8 |
+| 2–4 | Prefill overflow + draft-LM tier | serves the Mac plane's long-suffix turns via the block store; hosts batched small-LM drafting |
+| 1–2 | Lab/CI | quantization, EAGLE-head training, evals, nightly regression |
+
+**Parallelism guidance on this fabric**: pipeline parallelism is the workhorse for big models (per-microbatch boundary traffic only); TP beyond 2–4 is latency-bound on 25 GB/s (per-layer all-reduce); expert parallelism across the pod is a *throughput* tool — at decode batch ~32 the per-step all-to-all is ~15–20 ms of network, comparable to compute, so EP suits batch/offline lanes, never the interactive lane.
+
+**What the other planes become**: CPU servers keep exactly their roles — Mooncake-style L3 for the pod (now with native RDMA clients), the draft corpus, control plane. Macs shift to (a) developer-local inference (oMLX's home turf: private cache, instant TTFT on personal sessions), (b) optionally a dense-model interactive tier where M5-Max bandwidth beats a Spark per user, and (c) the perf/W and ANE experiments. One gateway fronts both planes; the block store remains the only place everything meets — but the pod no longer *needs* the Macs to serve.
+
+**SLO products, cleanly separated**: Spark pod = the shared agent farm (throughput, frontier access, batch/RL/eval lanes); Mac plane = interactive latency and personal workloads; CPU plane = state. Tens of Sparks turn the earlier heterogeneity from a necessity into an optimization.

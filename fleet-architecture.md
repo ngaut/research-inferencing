@@ -120,3 +120,28 @@ Short turns (suffix under the threshold) skip steps 1–3: the session's Mac hit
 - Sustained hot fleet + long prompts + ITL p99 misses → carve a decode-only Mac group (reversible).
 - Fleet gains a real fabric (25 GbE+ on Macs via TB adapters, or more ConnectX boxes) → thresholds drop; more traffic flows through the store; the architecture doesn't change, only the constants.
 - The one-line summary: **Macs turn bandwidth into tokens, Sparks turn FP4 compute into prefill and capacity, CPU servers turn RAM into hit rate — and the content-addressed block store is the only place all three meet.**
+
+---
+
+## 8. Addendum: Draft–Verify (DV) disaggregation — the third axis
+
+*Added after the SGLang study. Prior art: a [vLLM RFC for a standalone draft server](https://github.com/vllm-project/vllm/issues/42109) reporting ~1.4× time-per-output-token at equal GPU budget; [StarSD](https://arxiv.org/pdf/2601.21622) (one drafter serving many targets); SwiftSpec (async draft/verify pipeline on disjoint GPUs); [DSD](https://arxiv.org/pdf/2511.21669) (edge-cloud).*
+
+**Why DV separation is cheaper than P/D-style fears suggest.** Speculation's two roles exchange data **per cycle (k+1 tokens), not per token**, and the payloads are tiny: draft→verify sends k token IDs (plus, for lossless stochastic acceptance, truncated top-q probabilities — a few KB; greedy verify needs only the IDs); verify→draft sends an accepted length and one correction token. At ~16–30 verify cycles/s on a Mac-class box, a 0.1–0.3 ms LAN RTT is 1–2% of cycle time, and bandwidth is noise. The serial D→V→D dependency can also be partially pipelined: the drafter speculates cycle N+1 optimistically assuming full acceptance (right ~`p^k` of the time), hiding draft latency entirely when it wins.
+
+**The taxonomy that decides everything — information flow, not bandwidth:**
+
+| Drafter family | Conditions on | Separable? | Evidence |
+|---|---|---|---|
+| n-gram / SAM / retrieval | token IDs only, **stateless** | **Cleanly** — it's a lookup service | SGLang NGRAM has no draft KV at all |
+| Standalone small LM | token IDs (own KV) | Yes, but stateful (per-session draft KV → affinity) | vLLM RFC PoC, llama.cpp issue |
+| EAGLE / Lightning MTP | **target hidden states**, per cycle | **No** — fused to the verify box | SGLang PD: EAGLE `carries_draft_hidden_states`, "dramatically more expensive" across boundaries; MTP heads live inside the target checkpoint |
+| DFlash / DSpark | target hidden anchors | Mostly no (couples at anchors) | SGLang PD ships only bonus tokens for these — cheaper than EAGLE but still target-coupled |
+
+**The fleet design: Draft-as-a-Service on the CPU plane, with the corpus synergy.** The block store already holds every session's token stream (block keys derive from token chains). A draft service colocated with it maintains a **fleet-wide suffix-automaton corpus over all stored streams** — and SGLang measured **≥2× acceptance** when the corpus matches the output distribution, which agentic traffic (files echoed across turns, tool-call envelopes, diffs) maximally does. The lookup is microseconds and stateless, so one service fans in from every Mac and Spark; a spare M5 or AMX socket can batch small-LM drafting behind the same API for sessions where retrieval acceptance drops. Verify never leaves the target's continuous batch: the Mac issues an async draft RPC per cycle; if the response misses the batch's next step, that request simply decodes one token normally — graceful, per-cycle fallback.
+
+**What stays on-box:** hidden-state drafters. oMLX's Lightning MTP and SGLang's EAGLE-family remain fused to the verify box by information flow — and they cost little there (heads travel with the target weights). So the operating point is: **MTP/EAGLE on-box where the model ships heads; fleet retrieval-drafting as the universal cheap layer; small-LM draft service only where measured acceptance justifies its statefulness.** Composition with the other axes is clean: in a Spark P/D cell, the decode node is the verifier; the draft service serves every verifier identically.
+
+**When DV separation loses:** per-cycle RTT jitter directly widens inter-token-latency tails (on-box never pays it); lossless stochastic sampling across the wire requires shipping truncated q-distributions or accepting greedy/approximate acceptance; and if on-box MTP already delivers 2×+ with heads the checkpoint ships for free, a network drafter must beat that *after* subtracting its tail risk. Measure `acceptance × cycles/s` against the on-box baseline per model — same discipline as every other threshold in this design.
+
+Build-list addition: the draft service (SAM over the block store's token streams + optional batched small-LM tier + the per-cycle async RPC in the engines) — small; the corpus indexing rides on data the store already has.

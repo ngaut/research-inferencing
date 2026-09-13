@@ -12,8 +12,10 @@ the input every pass, stop when the latent stops changing):
 
 g is a per-neuron postsynaptic gain, s a per-neuron presynaptic efficacy (signed: -1 for
 inhibitory transmitters), c the loop feedback, h the step size, d = 1 - c the drive scale that
-keeps the loop's small-signal DC gain equal to FLM's. With c = 0 (or K = 1) and g = s = 1,
-h = 1 this reproduces FLM exactly, including its seeded interfaces, so FLM adapters transfer.
+keeps the loop's small-signal DC gain equal to FLM's. With c = 0 and g = s = 1, h = 1 this
+reproduces FLM exactly (bit for bit on the SciPy path, to ~3e-5 relative through the C kernel),
+including its seeded interfaces, so FLM adapters transfer. Note that K = 1 with c != 0 is NOT
+FLM: the warm start enters the drive as c * x_{t-1}, giving (1-c)(a x + b u) + c x.
 
 Two readings of the same loop. Looped transformer: a weight-tied block applied K times with the
 input injected every pass. Rate model: h < 1 is an Euler step of  dz/dt = -z + tanh(g W s (m + c z)),
@@ -139,20 +141,25 @@ class LoopedReservoir:
             self.state = np.zeros_like(self.state)
             residual[:] = 0
         else:
-            z = self.state
+            if self.feedback == 0.0 and self.step_size == 1.0:
+                limit = 1  # every further iteration would recompute the same state
+            z = np.array(self.state, dtype=np.float32, copy=True)
             active = np.ones(self.lanes, bool)
             for k in range(limit):
-                v = m + np.float32(self.feedback) * z if self.feedback != 0.0 else m
-                target = np.tanh(self._propagate(v, mode))
+                # Only lanes that have not converged are propagated; lanes are independent in the
+                # kernel and in SciPy, so a lane's numbers never depend on its batch companions.
+                idx = np.flatnonzero(active)
+                z_active = z[:, idx]
+                v = m[:, idx] + np.float32(self.feedback) * z_active if self.feedback != 0.0 else m[:, idx]
+                target = np.tanh(self._propagate(np.ascontiguousarray(v), mode))
                 candidate = target if self.step_size == 1.0 else \
-                    np.float32(1.0 - self.step_size) * z + np.float32(self.step_size) * target
-                change = np.sqrt(np.mean((candidate - z) ** 2, axis=0))
-                # Converged lanes freeze: a lane's result never depends on its batch companions.
-                z = np.where(active[None, :], candidate, z)
-                used[active] = k + 1
-                residual[active] = change[active]
+                    np.float32(1.0 - self.step_size) * z_active + np.float32(self.step_size) * target
+                change = np.sqrt(np.mean((candidate - z_active) ** 2, axis=0))
+                z[:, idx] = candidate
+                used[idx] = k + 1
+                residual[idx] = change
                 if self.tolerance is not None:
-                    active &= ~(change < self.tolerance)
+                    active[idx[change < self.tolerance]] = False
                     if not active.any():
                         break
             self.state = np.ascontiguousarray(z, dtype=np.float32)

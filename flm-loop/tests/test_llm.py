@@ -92,6 +92,31 @@ class LoopedFLMTests(unittest.TestCase):
             with torch.no_grad():
                 m.adapter.output.weight.zero_()
 
+    def test_prompt_nll_ttt_positions_are_causal_for_multi_turn_input(self):
+        m = self.model
+        with torch.no_grad():
+            m.adapter.output.weight.normal_(std=0.05)
+        try:
+            messages = [{'role': 'user', 'content': 'first question about cactus care'}, {'role': 'assistant', 'content': 'water rarely'},
+                        {'role': 'user', 'content': 'second question'}, {'role': 'assistant', 'content': 'light often'}]
+            m.prompt_nll(messages, 'intact', ttt=True)
+            ids = m.prompt_ids(messages, add_generation_prompt=False)
+            first = int(np.argmax(m.assistant_mask(messages, ids)))
+            self.assertGreater(len(m.ttt_positions), 0)
+            self.assertTrue(np.all(m.ttt_positions + 1 < first))
+        finally:
+            with torch.no_grad():
+                m.adapter.output.weight.zero_()
+
+    def test_shared_prefix_never_reaches_answer_tokens(self):
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        from train_adapter import shared_prefix
+        a = {'ids': np.array([1, 2, 3, 4, 5, 6, 7]), 'mask': np.arange(7) >= 4}
+        b = {'ids': np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]), 'mask': np.arange(9) >= 7}
+        self.assertEqual(shared_prefix([a, b]), 4)
+        c = {'ids': np.array([1, 2, 9, 9]), 'mask': np.arange(4) >= 2}
+        self.assertEqual(shared_prefix([a, b, c]), 2)
+
     def test_assistant_mask_marks_answers_only(self):
         m = self.model
         messages = [{'role': 'user', 'content': 'UNIQUEUSER'}, {'role': 'assistant', 'content': 'prism colors'},
@@ -130,6 +155,11 @@ class TrainAdapterScriptTests(unittest.TestCase):
             self.assertGreaterEqual(events[-1]['ttt']['steps'], 1)
             with self.assertRaisesRegex(ValueError, 'different graph'):
                 LoopedFLM(backbone, Graph.random(500, 12, seed=999), checkpoint=run / 'adapter.safetensors', device='cpu', threads=1)
+            chat = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'chat.py'), '--run', str(run), '--prompt', 'Name one exhibit.',
+                                   '--max-tokens', '4', '--seed', '1', '--device', 'cpu', '--ttt', '--telemetry'],
+                                  capture_output=True, text=True, cwd=str(ROOT), env={**os.environ, 'OMP_NUM_THREADS': '1'})
+            self.assertEqual(chat.returncode, 0, chat.stderr[-3000:])
+            self.assertIn('FLM-Loop:', chat.stdout)
 
 
 if __name__ == '__main__':

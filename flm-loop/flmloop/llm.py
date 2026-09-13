@@ -24,6 +24,7 @@ from torch import nn
 from safetensors.torch import load_file
 
 from .graph import Graph
+from .kernel import sha256 as sha256_file
 from .reservoir import LoopedReservoir
 
 DEFAULT_INTERFACE = {'seed': 7301, 'dimensions': 128, 'input_gain': 0.4, 'recurrence_gain': 0.6,
@@ -34,14 +35,6 @@ DEFAULT_SYSTEM = ('You are FLM-Loop, an experimental assistant: a pretrained lan
                   'readout of a fly connectome run as a looped block. Answer directly and concisely. You are '
                   'software, not a biological fly. Say when you do not know.')
 FAST_WEIGHTS = {'learning_rate': 0.05, 'decay': 0.0, 'max_norm': 0.5, 'chunk': 32}
-
-
-def sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def backbone_signature(folder):
@@ -202,6 +195,7 @@ class LoopedFLM:
         self.fast = FastWeights(self.adapter, **self.fast_config)
         self.trained = False
         self.run_manifest = None
+        self.ttt_positions = np.zeros(0, np.int64)
         if manifest is not None:
             if manifest['graph_signature'] != graph_signature(self.graph):
                 raise ValueError('Checkpoint belongs to a different graph.')
@@ -335,7 +329,8 @@ class LoopedFLM:
     @torch.no_grad()
     def prompt_nll(self, messages, mode='intact', ttt=False):
         """Mean next-token NLL over the assistant turns of `messages`, optionally after test-time
-        training the fast weights on the non-assistant prefix positions only. Used for evaluation."""
+        training the fast weights on the prompt positions that precede the first assistant token —
+        never on positions whose hidden state has already seen a scored answer. Used for evaluation."""
         ids = self.prompt_ids(messages, add_generation_prompt=False, max_context=10 ** 9)
         reservoir = self.reservoir()
         feats = np.stack([reservoir.step(self.embeddings[token], mode if mode != 'base' else 'intact') for token in ids])
@@ -343,8 +338,12 @@ class LoopedFLM:
         mask = self.assistant_mask(messages, ids)
         self.fast.reset()
         fast = None
+        self.ttt_positions = np.zeros(0, np.int64)
         if ttt and mode != 'base':
-            positions = np.where(~mask[1:])[0]  # prefix positions whose next token is not assistant content
+            first = int(np.argmax(mask)) if mask.any() else len(ids)
+            # Position i has consumed ids[:i+1] and predicts ids[i+1]: causal iff i + 1 < first.
+            positions = np.arange(max(0, first - 1))
+            self.ttt_positions = positions
             if len(positions):
                 f = torch.as_tensor(feats[positions], device=self.device)
                 self.fast.learn(lambda h, ff, d: self.scores(h, ff, mode, fast=d)[0], hidden_all[positions], f,

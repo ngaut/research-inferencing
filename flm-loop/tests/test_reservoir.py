@@ -74,6 +74,20 @@ class FLMEquivalenceTests(unittest.TestCase):
         self.assertLessEqual(int(many.last['iterations'][0]), 2)
 
 
+class FeedbackSemanticsTests(unittest.TestCase):
+    def test_k1_with_feedback_is_not_flm_but_c0_is_for_any_k(self):
+        graph = Graph.random(150, 5, seed=61)
+        x = inputs(5, 1, 8, 62)
+        reference = FLMReference(graph, 8, dimensions=8)
+        expected = np.stack([reference.step(e[0]) for e in x])
+        many = LoopedReservoir(graph, 8, dimensions=8, feedback=0.0, max_iterations=7, tolerance=None)
+        np.testing.assert_array_equal(np.stack([many.step(e[0]) for e in x]), expected)
+        self.assertEqual(int(many.last['iterations'][0]), 1)
+        one = LoopedReservoir(graph, 8, dimensions=8, feedback=0.8, max_iterations=1)
+        got = np.stack([one.step(e[0]) for e in x])
+        self.assertGreater(np.abs(got - expected).max(), 1e-3)
+
+
 class LoopTests(unittest.TestCase):
     def test_loop_contracts_geometrically_and_exits_early(self):
         graph = Graph.random(400, 8, seed=4)

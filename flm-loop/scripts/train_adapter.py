@@ -32,6 +32,17 @@ from flmloop.llm import (LoopedFLM, FlyAdapter, FastWeights, backbone_signature,
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def shared_prefix(records):
+    """Length of the token prefix common to every record, capped so it never reaches any record's
+    answer tokens (positions < n get prefix-state features; answers must be pooled per record)."""
+    all_ids = [x['ids'] for x in records]
+    n = 0
+    while n < min(map(len, all_ids)) and all(ids[n] == all_ids[0][n] for ids in all_ids):
+        n += 1
+    first_answer = min(int(np.argmax(x['mask'])) if x['mask'].any() else len(x['mask']) for x in records)
+    return min(n, first_answer)
+
+
 def parse():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--backbone', type=Path, required=True, help='local Hugging Face causal LM directory with a chat template')
@@ -146,9 +157,7 @@ def main():
             'ttt': m.fast_config, 'conversations_sha256': sha256_file(a.conversations)}
     (a.output / 'selection.json').write_text(json.dumps(selection, indent=2)); (a.output / 'plan.json').write_text(json.dumps(plan, indent=2))
     all_ids = [x['ids'] for records in splits.values() for x in records]
-    n = 0
-    while n < min(map(len, all_ids)) and all(ids[n] == all_ids[0][n] for ids in all_ids):
-        n += 1
+    n = shared_prefix([x for records in splits.values() for x in records])
     prefix_states, prefix_features = {}, {}
     for mode in ['intact', 'shuffled']:
         r = m.reservoir()

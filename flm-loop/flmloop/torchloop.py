@@ -45,18 +45,26 @@ class TorchLoopedReservoir(nn.Module):
         reference = LoopedReservoir(graph, embedding_dim, dimensions, seed, gain=gain, efficacy=efficacy)
         f32 = lambda a: torch.as_tensor(np.asarray(a, np.float32))
         i64 = lambda a: torch.as_tensor(np.asarray(a, np.int64))
-        projection = f32(reference.input_projection)
-        self.input_projection = nn.Parameter(projection) if learn_input else projection
-        if not learn_input:
-            self.register_buffer('input_projection_buffer', projection)
+        self.gain_limit = None if gain_limit is None else float(gain_limit)
+
+        def attach(name, tensor, learn):
+            # Parameters when learnable, buffers otherwise: both move with .to() and appear in state_dict.
+            if learn:
+                setattr(self, name, nn.Parameter(tensor))
+            else:
+                self.register_buffer(name, tensor)
+
+        attach('input_projection', f32(reference.input_projection), learn_input)
         self.register_buffer('input_bins', i64(reference.input_bins))
         self.register_buffer('input_sign', f32(reference.input_sign))
         self.register_buffer('output_bins', i64(reference.output_bins))
-        initial_output = f32(reference.output_sign / reference.output_scale[reference.output_bins])
-        self.output_weight = nn.Parameter(initial_output) if learn_output else initial_output
-        self.gain = nn.Parameter(f32(reference.gain)) if learn_gain else f32(reference.gain)
-        self.efficacy = nn.Parameter(f32(reference.efficacy)) if learn_efficacy else f32(reference.efficacy)
-        self.gain_limit = None if gain_limit is None else float(gain_limit)
+        attach('output_weight', f32(reference.output_sign / reference.output_scale[reference.output_bins]), learn_output)
+        raw_gain = f32(reference.gain)
+        if self.gain_limit is not None:
+            # Store the pre-tanh value so bounded_gain() returns exactly the requested gain at step 0.
+            raw_gain = self.gain_limit * torch.atanh(torch.clamp(raw_gain / self.gain_limit, -1 + 1e-6, 1 - 1e-6))
+        attach('gain', raw_gain, learn_gain)
+        attach('efficacy', f32(reference.efficacy), learn_efficacy)
 
     @property
     def drive_scale(self):
@@ -103,13 +111,19 @@ class TorchLoopedReservoir(nn.Module):
         """embeddings: (lanes, T, E). Returns features (lanes, T, D), final state, and a dict
         {k: features after k iterations} for every k in `supervise` (deep supervision targets).
         detach_every: truncate backprop through tokens every so many tokens.
-        loop_backprop: keep autograd only for the last this-many inner iterations."""
+        loop_backprop: keep autograd only for the last this-many inner iterations (extended so that
+        every supervised iteration count still receives gradient)."""
         lanes, steps, _ = embeddings.shape
         if state is None:
             state = torch.zeros(self.n, lanes, dtype=embeddings.dtype, device=embeddings.device)
         K = self.max_iterations if iterations is None else int(iterations)
+        supervise = sorted({int(k) for k in supervise if int(k) <= K})
+        if any(k < 1 for k in supervise):
+            raise ValueError('supervise iteration counts must be >= 1')
         keep_from = 0 if loop_backprop is None else max(0, K - int(loop_backprop))
-        outputs, extra = [], {k: [] for k in supervise if k <= K}
+        if supervise:
+            keep_from = min(keep_from, supervise[0] - 1)  # supervised iterations must carry gradient
+        outputs, extra = [], {k: [] for k in supervise}
         for t in range(steps):
             if detach_every and t and t % detach_every == 0:
                 state = state.detach()

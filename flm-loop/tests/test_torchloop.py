@@ -73,6 +73,37 @@ class TorchLoopTests(unittest.TestCase):
         np.testing.assert_allclose(got.numpy(), ref.sequence(x), rtol=2e-4, atol=2e-5)
 
 
+class ReviewRegressionTests(unittest.TestCase):
+    def setUp(self):
+        torch.manual_seed(1)
+        self.graph = Graph.random(200, 6, seed=51)
+
+    def test_gain_limit_initialisation_is_exact(self):
+        module = TorchLoopedReservoir(self.graph, 8, dimensions=8, gain=np.full(self.graph.n, 0.95, np.float32), gain_limit=3.0)
+        np.testing.assert_allclose(module.bounded_gain().detach().numpy(), 0.95, atol=1e-6)
+        exported = module.export()['gain']
+        np.testing.assert_allclose(exported, 0.95, atol=1e-6)
+
+    def test_supervised_iteration_below_truncation_still_gets_block_gradient(self):
+        module = TorchLoopedReservoir(self.graph, 8, dimensions=8, feedback=0.6, step_size=0.7, max_iterations=4)
+        x = torch.randn(2, 5, 8)
+        _, _, extra = module(x, supervise=(2,), loop_backprop=1)
+        extra[2].sum().backward()
+        self.assertIsNotNone(module.gain.grad)
+        self.assertGreater(float(module.gain.grad.abs().sum()), 0)
+        with self.assertRaises(ValueError):
+            module(x, supervise=(0,))
+
+    def test_frozen_arrays_are_buffers_in_the_state_dict(self):
+        module = TorchLoopedReservoir(self.graph, 8, dimensions=8, learn_gain=False, learn_input=False)
+        keys = set(module.state_dict().keys())
+        for name in ['gain', 'input_projection', 'efficacy', 'output_weight', 'input_bins']:
+            self.assertIn(name, keys)
+        self.assertNotIn('gain', dict(module.named_parameters()))
+        double = TorchLoopedReservoir(self.graph, 8, dimensions=8, learn_gain=False).to(torch.float64)
+        self.assertEqual(double.gain.dtype, torch.float64)
+
+
 class TrainGraphScriptTests(unittest.TestCase):
     def test_train_graph_script_exports_a_block_that_the_numpy_reservoir_loads(self):
         import json, os, subprocess, sys, tempfile

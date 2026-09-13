@@ -24,7 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from flmloop import Graph, LoopedReservoir, load_kernel, neurotransmitter_signs, random_signs  # noqa: E402
 from flmloop.plasticity import IntrinsicPlasticity, OnlineSoftmaxReadout  # noqa: E402
-from flmloop.probes import memory_capacity, effective_rank, logistic_probe, calibrate_gain  # noqa: E402
+from flmloop.probes import memory_capacity, effective_rank, logistic_probe, calibrate_gain, spectral_radius  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -99,7 +99,8 @@ def run_variant(name, cfg, ids, table, args, kernel):
                                     drive=0.4 * args.input_scale, feedback=cfg['feedback'], step_size=cfg['step_size'],
                                     max_iterations=cfg['max_iterations'], tolerance=cfg['tolerance'], gain=gain, efficacy=efficacy, kernel=kernel)
         if estimate is not None:
-            reservoir.spectral_radius = float(estimate['radius'] * gain[0])
+            own = estimate if source is graph else spectral_radius(graph, None, efficacy, iterations=60, kernel=kernel, seed=args.seed)
+            reservoir.spectral_radius = float(own['radius'] * gain[0])  # the radius this reservoir actually has
         if cfg.get('ip'):
             top = float(np.abs(reservoir.gain).max())
             rule = IntrinsicPlasticity(graph.n, target=args.ip_target, rate=args.ip_rate, smoothing=0.05, bounds=(0.25 * top, 1.5 * top))
@@ -128,6 +129,11 @@ def run_variant(name, cfg, ids, table, args, kernel):
     for t in range(steps):
         readout.observe(features[t], targets[:, t])
     online = readout.summary()
+    if args.save_features:
+        folder = args.output.parent / (args.output.stem + '-features')
+        folder.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(folder / f'{name}.npz', features=features.astype(np.float16), targets=targets,
+                            signal=signal.astype(np.float32), online_losses=np.asarray(readout.losses, np.float32))
     split = int(steps * 0.75)
     train_x = features[:split].reshape(-1, args.dims); train_y = targets[:, :split].T.reshape(-1)
     test_x = features[split:].reshape(-1, args.dims); test_y = targets[:, split:].T.reshape(-1)
@@ -179,6 +185,7 @@ def main():
     p.add_argument('--probe-l2', type=float, default=3e-3)
     p.add_argument('--max-delay', type=int, default=24)
     p.add_argument('--variants', default='')
+    p.add_argument('--save-features', action='store_true', help='store features, targets and per-observation online losses next to the output')
     p.add_argument('--output', type=Path, default=ROOT / 'results' / 'bench_reservoir.json')
     args = p.parse_args()
 

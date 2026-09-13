@@ -12,20 +12,14 @@ from pathlib import Path
 import numpy as np
 from scipy import sparse
 
+from .kernel import sha256
+
 # Sign prior from predicted neurotransmitters (MaleCNS body-neurotransmitters table).
 # GABA and glutamate are inhibitory in the fly central brain, histamine at photoreceptor
 # synapses; acetylcholine is the main excitatory transmitter. Neuromodulators keep FLM's
 # unsigned (+1) default because their effect is not a fast synaptic sign.
 NEUROTRANSMITTER_SIGNS = {'acetylcholine': 1.0, 'gaba': -1.0, 'glutamate': -1.0, 'histamine': -1.0,
                           'dopamine': 1.0, 'serotonin': 1.0, 'octopamine': 1.0, 'unclear': 1.0}
-
-
-def sha256(path):
-    h = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for block in iter(lambda: f.read(8 * 1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def _as_csr(matrix):

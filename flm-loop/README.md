@@ -9,7 +9,7 @@ controls — and changes what the graph *does*:
 
 | | FLM | flm-loop |
 |---|---|---|
-| propagation per token | one step, `x = tanh(W(0.6x + 0.4u))` | K damped iterations of the same block with the input re-injected every pass, early exit on the residual (looped-transformer / rate-model dynamics); K = 1 reproduces FLM bit for bit |
+| propagation per token | one step, `x = tanh(W(0.6x + 0.4u))` | K damped iterations of the same block with the input re-injected every pass, early exit on the residual (looped-transformer / rate-model dynamics); feedback c = 0 reproduces FLM (bit for bit on the SciPy path, to 3e-5 through the C kernel) |
 | synapses | unsigned, incoming-normalized counts | the same, times per-neuron **efficacy signs from the connectome's own neurotransmitter predictions** (GABA / glutamate / histamine = inhibitory) and a per-neuron gain calibrated to a target spectral radius |
 | what learns | the readout, offline | the readout offline **plus** per-conversation fast weights learned during prefill from the prompt's own next tokens (test-time training), a local intrinsic-plasticity gain rule, and optionally the gains / efficacies / pooling weights trained *through the loop* (random iteration counts, deep supervision, truncated loop backprop) |
 | controls | no_edges, shuffled (relabeling), direct-input adapter | those, plus a degree-sequence-preserving **rewired** graph and random signs with the same inhibitory share |
@@ -92,8 +92,8 @@ held-out conversation's non-answer prefix and scored on the answer.
 
 ## What is and is not claimed
 
-The code reproduces FLM at K = 1 (tested bit for bit against FLM's reservoir on the same
-interfaces). The looped and signed variants were measured against degree-matched rewired graphs
+The code reproduces FLM at feedback c = 0 (tested bit for bit against FLM's reservoir on the same
+interfaces, SciPy path; the C kernel agrees to 3e-5). K = 1 with c ≠ 0 is a different single-step map. The looped and signed variants were measured against degree-matched rewired graphs
 and random signs, on the real connectome, with a linear readout and no language model. Result
 (see the research note, §5): the connectome behaves as a memory, not a computer — the real wiring
 beats its rewiring by 0.04–0.09 nats on every run through its slow modes, while looping, signs

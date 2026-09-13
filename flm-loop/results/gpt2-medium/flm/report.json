@@ -1,0 +1,55 @@
+{
+  "base": {
+    "nll": 3.250598290314277,
+    "perplexity": 25.805774644530963,
+    "mean_KL_base_to_mode": 0,
+    "top_token_change_fraction": 0.0,
+    "logit_delta_rms": 0.0,
+    "targets": 3072
+  },
+  "fly_adapter": {
+    "nll": 3.1916190149883428,
+    "perplexity": 24.327782620883042,
+    "mean_KL_base_to_mode": 0.010819089535895424,
+    "top_token_change_fraction": 0.055013020833333336,
+    "logit_delta_rms": 0.21160308922373025,
+    "targets": 3072
+  },
+  "direct_input_adapter": {
+    "nll": 3.1910343257089457,
+    "perplexity": 24.31356258474956,
+    "mean_KL_base_to_mode": 0.011114263877971098,
+    "top_token_change_fraction": 0.055989583333333336,
+    "logit_delta_rms": 0.21602388574042625,
+    "targets": 3072
+  },
+  "relabeled_wiring": {
+    "nll": 3.2491572176416716,
+    "perplexity": 25.768613430331474,
+    "mean_KL_base_to_mode": 0.0011598514271706033,
+    "top_token_change_fraction": 0.0224609375,
+    "logit_delta_rms": 0.08143307672758952,
+    "targets": 3072
+  },
+  "no_edges": {
+    "nll": 3.250598290314277,
+    "perplexity": 25.805774644530963,
+    "mean_KL_base_to_mode": 0,
+    "top_token_change_fraction": 0.0,
+    "logit_delta_rms": 0.0,
+    "targets": 3072,
+    "exact_base_identity": true
+  },
+  "fly_adapter_ttt": {
+    "nll": 3.191610942284266,
+    "perplexity": 24.3275862306858,
+    "targets": 3072,
+    "mean_fast_norm": 0.007357253169175237,
+    "mean_prefix_loss_drop": 1.066371003786723
+  },
+  "notes": [
+    "Held-out conversations are disjoint from fitting and validation; this is a small local split, not a benchmark.",
+    "Wiring specificity needs matched topology controls (see bench_reservoir.py); a direct-input readout is included here.",
+    "fly_adapter_ttt learns fast weights on the non-answer prefix of each test record and scores the answer; the slow adapter is unchanged."
+  ]
+}

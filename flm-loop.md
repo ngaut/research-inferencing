@@ -168,6 +168,7 @@ Hugging Face, its mirrors, ModelScope, Ollama and the PyTorch download host are 
 | GPT-2 base (124M) · FLM-equivalent (`c = 0`, K = 1) | 3.6668 | **3.5989** | 3.5985 | 3.6433 | 3.6837 | 3.5978 |
 | GPT-2 base (124M) · looped, unsigned (`c = 0.8`, `h = 0.7`, K ≤ 8) | 3.6668 | **3.5987** | 3.5985 | *pending* | 3.6762 | *pending* |
 | GPT-2 base (124M) · looped + NT signs (gain 0.95) | 3.6668 | **3.5982** | 3.5985 | *pending* | 3.6600 | *pending* |
+| GPT-2 medium (355M) · FLM-equivalent (`c = 0`, K = 1) | 3.2506 | **3.1916** | 3.1910 | *pending* | 3.2492 | *pending* |
 <!-- GPT2-ROWS -->
 
 *Perplexities for the first row: 39.1 → 36.6 / 36.5 / 38.2 / 39.8. The constant-feature control is the same adapter fed an all-ones feature, so it can only learn one fixed logit offset — a corpus prior. TTT: fast weights on the adapter's output projection, learned on each window's first 128 tokens, swept over learning rates 0.05–50 and norm bounds 0.5–5 ([`posthoc.json`](flm-loop/results/gpt2-base/flm/posthoc.json)).*

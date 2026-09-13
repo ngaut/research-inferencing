@@ -1,0 +1,189 @@
+{
+ "header": {
+  "graph": {
+   "name": "malecns_v1.0",
+   "neurons": 166700,
+   "directed_edges": 25582938,
+   "mean_in_degree": 153.46693461307737,
+   "isolated_inputs": 370,
+   "row_sum_max": 1.0000003576278687
+  },
+  "kernel": "-O3 -ffp-contract=off -shared -fPIC -fopenmp",
+  "corpus_bytes": 176679,
+  "lanes": 16,
+  "tokens": 512,
+  "neurotransmitter_counts": {
+   "acetylcholine": 103720,
+   "gaba": 22069,
+   "unclear": 2999,
+   "glutamate": 29302,
+   "octopamine": 101,
+   "serotonin": 48,
+   "dopamine": 392,
+   "histamine": 7891,
+   "unknown": 178
+  },
+  "negative_efficacy_fraction": 0.355500899820036,
+  "config": {
+   "graph": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/flm/cache/malecns_v1",
+   "random_graph": 2000,
+   "nt": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/flm/cache/source/neurotransmitters.feather",
+   "text": [
+    "/home/user/research-inferencing/*.md"
+   ],
+   "lanes": 16,
+   "tokens": 512,
+   "dims": 128,
+   "embed": 64,
+   "interface_seed": 7301,
+   "seed": 1,
+   "feedback": 0.8,
+   "step_size": 0.7,
+   "max_iterations": 8,
+   "tolerance": 0.001,
+   "target_radius": 0.95,
+   "warmup": 128,
+   "ip_target": 0.05,
+   "ip_rate": 0.02,
+   "online_lr": 0.05,
+   "probe_steps": 300,
+   "probe_l2": 0.003,
+   "max_delay": 24,
+   "variants": "direct,flm,flm-rewired,loop-signed,loop-signed-rewired",
+   "output": "results/bench_reservoir_seed1.json"
+  }
+ },
+ "results": [
+  {
+   "variant": "direct",
+   "seconds_per_token": 4.546577110886574e-05,
+   "online": {
+    "online_nll": 3.3821255188787083,
+    "online_accuracy": 0.185302734375,
+    "tail_nll": 3.261082047412562,
+    "tail_accuracy": 0.1962890625,
+    "observations": 8192
+   },
+   "probe": {
+    "train_nll": 2.693788861190088,
+    "train_accuracy": 0.24251302083333334,
+    "test_nll": 3.119937441052941,
+    "test_accuracy": 0.220703125
+   },
+   "memory_capacity": 1.1138177982934803,
+   "memory_per_delay": [
+    0.9999999999742245,
+    0.07701185183615067,
+    0.020691265344824794,
+    0.0024833596297439975,
+    0.0,
+    0.005126832275156201,
+    0.004687844448785561,
+    0.0031276414974786837,
+    0.0,
+    0.0,
+    0.0006890032871155194,
+    0.0
+   ],
+   "effective_rank": 22.83513512668627,
+   "telemetry": {
+    "iterations": 0.0,
+    "residual": null,
+    "state_rms": null,
+    "saturation": null,
+    "gain": null,
+    "spectral_radius": null,
+    "contraction_bound": null
+   },
+   "graph": null
+  },
+  {
+   "variant": "flm",
+   "seconds_per_token": 0.19068147940561175,
+   "online": {
+    "online_nll": 3.3112614152611792,
+    "online_accuracy": 0.2039794921875,
+    "tail_nll": 3.147925458410012,
+    "tail_accuracy": 0.224609375,
+    "observations": 8192
+   },
+   "probe": {
+    "train_nll": 2.497950307238496,
+    "train_accuracy": 0.3277994791666667,
+    "test_nll": 2.9592295678540443,
+    "test_accuracy": 0.30224609375
+   },
+   "memory_capacity": 2.8883968051034743,
+   "memory_per_delay": [
+    0.9942082751246348,
+    0.9085784115433279,
+    0.6382407068864409,
+    0.19819961993236968,
+    0.07513683099557811,
+    0.028814433950492324,
+    0.009373478767203625,
+    0.009381745376983552,
+    0.016195204257409834,
+    0.002616222057962303,
+    0.0019491339036644684,
+    0.0057027423074064165
+   ],
+   "effective_rank": 23.400133331631142,
+   "telemetry": {
+    "iterations": 1.0,
+    "residual": 0.12633512681350112,
+    "state_rms": 0.09802560134266969,
+    "saturation": 0.0,
+    "gain": 1.0,
+    "spectral_radius": null,
+    "contraction_bound": 0.0,
+    "negative_efficacy_fraction": 0.0
+   },
+   "graph": "malecns_v1.0"
+  },
+  {
+   "variant": "flm-rewired",
+   "seconds_per_token": 0.358251104131341,
+   "online": {
+    "online_nll": 3.401757060659391,
+    "online_accuracy": 0.1883544921875,
+    "tail_nll": 3.2566758926828716,
+    "tail_accuracy": 0.20654296875,
+    "observations": 8192
+   },
+   "probe": {
+    "train_nll": 2.631244326817868,
+    "train_accuracy": 0.2877604166666667,
+    "test_nll": 3.069260828309575,
+    "test_accuracy": 0.25927734375
+   },
+   "memory_capacity": 2.3430498984044883,
+   "memory_per_delay": [
+    0.9988895672935961,
+    0.9463499789915248,
+    0.2953342959190578,
+    0.05483246837148725,
+    0.013040209528506264,
+    0.0028391118093147316,
+    0.007112168737439584,
+    0.014014515910877212,
+    0.008870964510208412,
+    0.0017666173324766277,
+    0.0,
+    0.0
+   ],
+   "effective_rank": 21.53617701627124,
+   "telemetry": {
+    "iterations": 1.0,
+    "residual": 0.12805560138076544,
+    "state_rms": 0.0949794697080506,
+    "saturation": 0.0,
+    "gain": 1.0,
+    "spectral_radius": null,
+    "contraction_bound": 0.0,
+    "negative_efficacy_fraction": 0.0
+   },
+   "graph": "malecns_v1.0-rewired1"
+  }
+ ]
+}

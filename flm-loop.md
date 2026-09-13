@@ -74,7 +74,63 @@ The readout-side plasticity is where the fly itself learns (Kenyon-cell → outp
 
 Setup ([`scripts/bench_reservoir.py`](flm-loop/scripts/bench_reservoir.py)): English text (this repository's notes, 158 KB) as bytes; one fixed random 64-d embedding per byte standing in for the backbone's token embedding; 16 lanes × 512 tokens (8,192 next-byte predictions); FLM's interfaces (seed 7301, 128 dimensions); the exact MaleCNS graph (166,700 × 25.6M). Loop settings `c = 0.8, h = 0.7, K ≤ 8, ε = 10⁻³`, target radius 0.95. Metrics: prequential online NLL (nats/byte; `direct` = the bigram baseline the backbone would see anyway), an offline logistic probe fit on the first 75 % of every lane and scored on the rest, Jaeger memory capacity of the input code, effective rank, loop telemetry, seconds per 16-lane token on 4 CPU cores.
 
-<!-- RESULTS -->
+### 5.1 FLM's operating point: the linear regime (seed 0; seed 1 for the K = 1 rows)
+
+| variant | online NLL | tail NLL | probe NLL | probe acc | memory | eff. rank | iters | state RMS |
+|---|---|---|---|---|---|---|---|---|
+| direct input (bigram baseline) | 3.350 · *3.382* | 3.064 | 2.940 | 0.244 | 1.06 · *1.11* | 22.3 | — | — |
+| **FLM** (K = 1, unsigned) | **3.273** · *3.311* | 2.980 | **2.809** · *2.959* | 0.274 | 2.67 · *2.89* | 23.8 | 1 | 0.098 |
+| FLM on rewired graph | 3.347 · *3.402* | 3.065 | 2.903 · *3.069* | 0.269 | 2.36 · *2.34* | 21.1 | 1 | 0.095 |
+| FLM + NT signs (gain 0.95) | 3.340 | 3.055 | 2.852 | 0.275 | 2.78 | 23.7 | 1 | 0.092 |
+| loop, unsigned (c 0.8, h 0.7, K ≤ 8) | **3.246** | **2.973** | 2.826 | 0.253 | 2.52 | 22.9 | 7.0 | 0.027 |
+| loop + NT signs | 3.375 | 3.101 | 2.907 | 0.262 | 2.51 | 21.2 | 4.8 | 0.020 |
+| loop + NT signs, rewired (own gain 4.08) | 3.354 | 3.059 | 2.858 | 0.269 | 2.25 | 21.6 | 7.8 | 0.092 |
+| loop + random signs (same 35.6 %) | 3.361 | 3.074 | 2.915 | 0.253 | 2.30 | 20.7 | 4.8 | 0.020 |
+| loop + NT signs + intrinsic plasticity | = loop + NT signs (the rule was a no-op, see below) | | | | | | | |
+
+*Italics: seed 1 (different lane offsets, byte embeddings, rewiring). Online NLL is over 8,192 predictions; its standard error is ≈ 0.03 nats, so differences under ~0.06 are noise.* Cost on 4 CPU cores: 0.20 s per 16-lane token at K = 1, 0.9–1.5 s looped.
+
+Three facts survive both seeds:
+
+1. **FLM's graph beats its own direct-input baseline** here — by 0.077 / 0.071 nats online and 0.13 / 0.16 on the probe — and the gain is *memory*: linear memory capacity 2.67 / 2.89 delays versus 1.06 / 1.11, with the input still decodable one token later at R² 0.92 and two tokens later at 0.58 (direct: 0.04 and 0.02).
+2. **The real wiring beats a degree-preserving rewiring** at K = 1 — by 0.074 / 0.091 nats online, 0.094 / 0.110 on the probe — and again the difference is memory (2.36 / 2.34 delays on the rewired graph; the two-token-back R² drops from 0.58 to 0.38). FLM's `shuffled` control relabels nodes and therefore preserves the topology exactly; it *cannot* see this. A rewiring can.
+3. **Nothing else helps in this regime.** Iterating the unsigned block gives 0.027 nats online (borderline) and nothing offline; neurotransmitter signs cost 0.07–0.10; random signs cost about the same as real signs; the rewired signed control is not comparable at all (its calibration put it at gain 4.08 and a different state amplitude — the rerun in §5.4 fixes that); and the intrinsic-plasticity variant reproduced its parent to the last digit because the rule's upper gain bound was the calibrated gain itself while activity sat far *below* target — a pinned rule, since fixed to be two-sided.
+
+### 5.2 What the wiring contributes: slow modes, i.e. memory
+
+Twelve largest eigenvalue magnitudes of the propagation operator (ARPACK on the full 166,700-node matrix, [`results/spectrum.json`](flm-loop/results/spectrum.json)):
+
+| operator | \|λ₁..λ₁₂\| |
+|---|---|
+| real `W` (unsigned, incoming-normalized) | 1.000 · 1.000 · 1.000 · 0.985 · 0.971 · 0.966 · 0.939 · 0.933 · 0.930 · 0.923 · 0.922 · 0.920 |
+| degree-preserving rewiring (seed 0 / seed 1) | 1.000 then a cliff: 0.166 × 11 / 0.165 × 11 |
+| real `W` × NT signs | 1.000 · 1.000 · 0.915 · 0.914 · 0.912 · 0.910 · 0.848 · 0.847 · 0.835 · 0.835 · 0.835 · 0.830 |
+
+The rewired graph is a textbook random matrix: one Perron mode (the mean) and a bulk whose radius, 0.166, equals the median row L2 norm of `W` (0.163). Everything but the graph-wide average decays by a factor 6 per propagation, times FLM's 0.6 leak — one token of memory, then nothing. The real connectome has **a dense band of modes above 0.92** (three at 1.0: near-closed subsystems; the band is the graph's modularity — hemispheres, optic lobes, nerve cord, mushroom body), each decaying by only 0.55–0.6 per token, so the recent past stays linearly decodable for two or three tokens. Signs remove half of that band (six modes above 0.91 instead of twelve), which is exactly why the signed variants lose memory and lose nats in this regime.
+
+So the fly wiring's *entire* measurable contribution in FLM's formulation is ~1.5 tokens of linear memory, worth 0.07–0.09 nats to a linear next-byte readout — and worth nothing to a 1.2B transformer that already carries 1,536 tokens of context, which is why FLM's adapter cannot beat its direct-input control. The diagnosis of §2 stands, with the mechanism now named: **an averaging operator with slow modes is a memory, not a computer**, and neither iterating it nor signing it changes that while the block stays linear.
+
+### 5.3 Why the block stays linear, and the fix
+
+State RMS is 0.02–0.10 in every row above. FLM's drive `0.4·code[bins]·sign` has unit-RMS codes, but `W` averages ~150 random-sign inputs per neuron: the post-averaging drive is 0.4 × 0.163 ≈ 0.065 — `tanh` never bends. In echo-state terms FLM's *input scaling* is set ~10× too low for the operator's normalization. Sweeping the input scale on the real graph (4 lanes × 40 tokens):
+
+| input scale | FLM state RMS · \|x\| > 0.5 · saturated | looped unsigned | looped + NT signs |
+|---|---|---|---|
+| 1 (FLM) | 0.097 · 0.2 % · 0 | 0.027 · 0 · 0 | 0.020 · 0 · 0 |
+| 3 | 0.251 · 6 % · 0 | 0.078 · 0.1 % · 0 | 0.059 · 0 · 0 |
+| 10 | 0.538 · 42 % · 2.4 % | 0.218 · 4 % · 0 | 0.178 · 2 % · 0 |
+| 30 | 0.793 · 77 % · 23 % | 0.443 · 28 % · 0.7 % | 0.402 · 22 % · 0.4 % |
+
+(The looped block sits lower at the same scale because its `1-c` drive normalization preserves FLM's gain only on the dominant mode; the resolvent attenuates the input's fast modes by up to `1-c`.) Scale 10 puts FLM's block squarely in the nonlinear regime; scale 30 does the same for the looped block. Those are the two reruns of §5.4.
+
+### 5.4 The nonlinear regime
+
+<!-- RESULTS-NONLINEAR -->
+
+### 5.5 Training the block through the loop
+
+<!-- RESULTS-TRAIN -->
+
 
 ## 6. Costs and the path to the real backbone
 

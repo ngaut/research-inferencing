@@ -33,6 +33,9 @@ scripts/train_graph.py       train gains / efficacies / pooling through the loop
 scripts/train_adapter.py     FLM's adapter recipe on looped features + TTT evaluation -> runs/<name>/
 scripts/chat.py              chat with a trained run, --ttt for fast weights
 scripts/make_tiny_backbone.py fully offline tiny chat backbone for tests
+scripts/convert_keras_gpt2.py  KerasNLP GPT-2 preset (public GCS bucket) -> HF GPT2LMHeadModel, with sanity checks
+scripts/posthoc_controls.py    constant-feature control + test-time-training sweep for a run
+scripts/summarize_runs.py      runs (+ posthoc) -> one markdown table
 tests/                       36 unit tests (toy graphs; tiny backbone; end-to-end scripts)
 data/conversations.json      FLM's 32 synthetic style conversations (MIT), vendored
 results/                     benchmark outputs from the MaleCNS graph
@@ -88,7 +91,15 @@ python scripts/chat.py --run runs/looped-v1 --ttt --telemetry
 
 `train_adapter.py` reports base / fly adapter / direct-input control / relabeled wiring / no_edges
 exactly like FLM, plus `fly_adapter_ttt`: the same adapter with fast weights learned on each
-held-out conversation's non-answer prefix and scored on the answer.
+held-out conversation's non-answer prefix and scored on the answer. `--text-corpus FILE` runs the
+same recipe on windows of plain text (no chat template).
+
+When Hugging Face is unreachable, a real pretrained backbone is still available: the public
+`keras-nlp` bucket on `storage.googleapis.com` serves GPT-2 presets, and
+`scripts/convert_keras_gpt2.py --source <preset dir> --output backbones/gpt2-base --check-text some.txt`
+turns one into an HF model directory (`results/gpt2/sanity-*.json` records the checks). The five
+sandbox runs on GPT-2 base and medium are in `results/gpt2-base/` and `results/gpt2-medium/`:
+fly adapter and direct-input control tie in every configuration (see the research note, §6).
 
 ## What is and is not claimed
 

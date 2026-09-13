@@ -1,0 +1,92 @@
+[
+  {
+    "stage": "epoch",
+    "model": "intact",
+    "epoch": 1,
+    "train_nll": 3.857017975921432,
+    "validation": {
+      "nll": 3.578007203526795,
+      "perplexity": 35.802123365268926,
+      "mean_KL_base_to_mode": 0.007390305316221202,
+      "top_token_change_fraction": 0.05517578125,
+      "logit_delta_rms": 0.1835203869522877,
+      "targets": 4096
+    },
+    "elapsed": 672.0
+  },
+  {
+    "stage": "epoch",
+    "model": "intact",
+    "epoch": 2,
+    "train_nll": 3.8348227056364217,
+    "validation": {
+      "nll": 3.574349468573928,
+      "perplexity": 35.671407894259616,
+      "mean_KL_base_to_mode": 0.008140261641528923,
+      "top_token_change_fraction": 0.05712890625,
+      "logit_delta_rms": 0.17988536557824067,
+      "targets": 4096
+    },
+    "elapsed": 737.8
+  },
+  {
+    "stage": "epoch",
+    "model": "intact",
+    "epoch": 3,
+    "train_nll": 3.8306153683612743,
+    "validation": {
+      "nll": 3.572761273011565,
+      "perplexity": 35.61479968688948,
+      "mean_KL_base_to_mode": 0.008364891962628462,
+      "top_token_change_fraction": 0.057373046875,
+      "logit_delta_rms": 0.15881273221282047,
+      "targets": 4096
+    },
+    "elapsed": 805.5
+  },
+  {
+    "stage": "epoch",
+    "model": "direct",
+    "epoch": 1,
+    "train_nll": 3.8520009365553656,
+    "validation": {
+      "nll": 3.57535017747432,
+      "perplexity": 35.70712245658868,
+      "mean_KL_base_to_mode": 0.007709791532761301,
+      "top_token_change_fraction": 0.0537109375,
+      "logit_delta_rms": 0.17013285232847478,
+      "targets": 4096
+    },
+    "elapsed": 872.9
+  },
+  {
+    "stage": "epoch",
+    "model": "direct",
+    "epoch": 2,
+    "train_nll": 3.8316327755649886,
+    "validation": {
+      "nll": 3.5732228327542543,
+      "perplexity": 35.6312418388947,
+      "mean_KL_base_to_mode": 0.008028970147279324,
+      "top_token_change_fraction": 0.05322265625,
+      "logit_delta_rms": 0.1511208728786438,
+      "targets": 4096
+    },
+    "elapsed": 940.5
+  },
+  {
+    "stage": "epoch",
+    "model": "direct",
+    "epoch": 3,
+    "train_nll": 3.8272056685139737,
+    "validation": {
+      "nll": 3.5717736687511206,
+      "perplexity": 35.57964372193169,
+      "mean_KL_base_to_mode": 0.00844509992748499,
+      "top_token_change_fraction": 0.05712890625,
+      "logit_delta_rms": 0.14205500747762126,
+      "targets": 4096
+    },
+    "elapsed": 1005.4
+  }
+]

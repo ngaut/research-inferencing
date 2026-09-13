@@ -225,7 +225,7 @@ def main():
         embedded = [embedding_values[[lookup[int(token)] for token in item['ids'][n:]]] for item in records]
         for item in records:
             keep = np.ones(len(item['ids']), bool) if keep_all else item['mask']
-            h = m.base.model(torch.as_tensor(item['ids'][None, :], device=m.device), use_cache=False).last_hidden_state[0]
+            h = m.inner(torch.as_tensor(item['ids'][None, :], device=m.device), use_cache=False).last_hidden_state[0]
             columns['hidden'].append(h[torch.as_tensor(keep, device=m.device)].float().cpu().numpy().astype(np.float16))
             columns['labels'].append(item['labels'][keep]); columns['mask'].append(item['mask'][keep])
         for mode in modes:

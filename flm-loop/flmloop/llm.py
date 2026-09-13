@@ -188,6 +188,8 @@ class LoopedFLM:
         self.base = AutoModelForCausalLM.from_pretrained(str(self.backbone_dir), local_files_only=True, trust_remote_code=False,
                                                          dtype=dtype, attn_implementation='eager').to(self.device).eval()
         self.base.requires_grad_(False)
+        # The decoder stack under the LM head: `.model` for Llama/LFM2-style models, `.transformer` for GPT-2.
+        self.inner = self.base.base_model
         self.hidden_size = self.base.config.hidden_size
         self.embeddings = EmbeddingView(self.base.get_input_embeddings().weight)
         self.block = {'gain': gain, 'efficacy': efficacy, 'output_weight': output_weight}
@@ -280,7 +282,7 @@ class LoopedFLM:
                 if i % 24 == 0:
                     yield {'type': 'progress', 'processed': i + 1, 'total': len(ids)}
         tokens = torch.tensor([ids], device=self.device)
-        result = self.base.model(tokens, use_cache=True)
+        result = self.inner(tokens, use_cache=True)
         hidden_all, past = result.last_hidden_state[0], result.past_key_values
         hidden = hidden_all[-1:]
         self.fast.reset()
@@ -318,7 +320,7 @@ class LoopedFLM:
                 break
             if mode != 'base':
                 features = reservoir.step(self.embeddings[token], mode)
-            result = self.base.model(torch.tensor([[token]], device=self.device), past_key_values=past, use_cache=True)
+            result = self.inner(torch.tensor([[token]], device=self.device), past_key_values=past, use_cache=True)
             hidden, past = result.last_hidden_state[:, -1], result.past_key_values
         yield {'type': 'done', 'tokens': len(generated), 'elapsed': round(time.perf_counter() - started, 3),
                'stop_reason': 'eos' if len(generated) < max_tokens else 'token_limit',
@@ -334,7 +336,7 @@ class LoopedFLM:
         ids = self.prompt_ids(messages, add_generation_prompt=False, max_context=10 ** 9)
         reservoir = self.reservoir()
         feats = np.stack([reservoir.step(self.embeddings[token], mode if mode != 'base' else 'intact') for token in ids])
-        hidden_all = self.base.model(torch.tensor([ids], device=self.device), use_cache=False).last_hidden_state[0]
+        hidden_all = self.inner(torch.tensor([ids], device=self.device), use_cache=False).last_hidden_state[0]
         mask = self.assistant_mask(messages, ids)
         self.fast.reset()
         fast = None

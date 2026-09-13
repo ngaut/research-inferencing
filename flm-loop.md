@@ -83,8 +83,8 @@ Setup ([`scripts/bench_reservoir.py`](flm-loop/scripts/bench_reservoir.py)): Eng
 | FLM on rewired graph | 3.347 · *3.402* | 3.065 | 2.903 · *3.069* | 0.269 | 2.36 · *2.34* | 21.1 | 1 | 0.095 |
 | FLM + NT signs (gain 0.95) | 3.340 | 3.055 | 2.852 | 0.275 | 2.78 | 23.7 | 1 | 0.092 |
 | loop, unsigned (c 0.8, h 0.7, K ≤ 8) | **3.246** | **2.973** | 2.826 | 0.253 | 2.52 | 22.9 | 7.0 | 0.027 |
-| loop + NT signs | 3.375 | 3.101 | 2.907 | 0.262 | 2.51 | 21.2 | 4.8 | 0.020 |
-| loop + NT signs, rewired (own gain 4.08) | 3.354 | 3.059 | 2.858 | 0.269 | 2.25 | 21.6 | 7.8 | 0.092 |
+| loop + NT signs | 3.375 · *3.366* | 3.101 | 2.907 · *3.053* | 0.262 | 2.51 · *2.72* | 21.2 | 4.8 | 0.020 |
+| loop + NT signs, rewired (own gain 4.08) | 3.354 · *3.368* | 3.059 | 2.858 · *3.017* | 0.269 | 2.25 · *2.59* | 21.6 | 7.8 | 0.092 |
 | loop + random signs (same 35.6 %) | 3.361 | 3.074 | 2.915 | 0.253 | 2.30 | 20.7 | 4.8 | 0.020 |
 | loop + NT signs + intrinsic plasticity | = loop + NT signs (the rule was a no-op, see below) | | | | | | | |
 
@@ -94,7 +94,7 @@ Three facts survive both seeds:
 
 1. **FLM's graph beats its own direct-input baseline** here — by 0.077 / 0.071 nats online and 0.13 / 0.16 on the probe — and the gain is *memory*: linear memory capacity 2.67 / 2.89 delays versus 1.06 / 1.11, with the input still decodable one token later at R² 0.92 and two tokens later at 0.58 (direct: 0.04 and 0.02).
 2. **The real wiring beats a degree-preserving rewiring** at K = 1 — by 0.074 / 0.091 nats online, 0.094 / 0.110 on the probe — and again the difference is memory (2.36 / 2.34 delays on the rewired graph; the two-token-back R² drops from 0.58 to 0.38). FLM's `shuffled` control relabels nodes and therefore preserves the topology exactly; it *cannot* see this. A rewiring can.
-3. **Nothing else helps in this regime.** Iterating the unsigned block gives 0.027 nats online (borderline) and nothing offline; neurotransmitter signs cost 0.07–0.10; random signs cost about the same as real signs; the rewired signed control is not comparable at all (its calibration put it at gain 4.08 and a different state amplitude — the rerun in §5.4 fixes that); and the intrinsic-plasticity variant reproduced its parent to the last digit because the rule's upper gain bound was the calibrated gain itself while activity sat far *below* target — a pinned rule, since fixed to be two-sided.
+3. **Nothing else helps in this regime.** Iterating the unsigned block gives 0.027 nats online (borderline) and nothing offline; neurotransmitter signs cost 0.06–0.10; random signs cost about the same as real signs; once signed and looped, the real wiring and its rewiring tie on both seeds (3.375 vs 3.354, 3.366 vs 3.368 — with the caveat that the control's own calibration put it at gain 4.08 and a larger state amplitude; §5.4 reruns it at the real graph's gain); and the intrinsic-plasticity variant reproduced its parent to the last digit because the rule's upper gain bound was the calibrated gain itself while activity sat far *below* target — a pinned rule, since fixed to be two-sided.
 
 ### 5.2 What the wiring contributes: slow modes, i.e. memory
 
@@ -129,7 +129,7 @@ State RMS is 0.02–0.10 in every row above. FLM's drive `0.4·code[bins]·sign`
 
 ### 5.5 Training the block through the loop
 
-<!-- RESULTS-TRAIN -->
+`train_graph.py` on the real graph, as a trainability demonstration rather than a result: 24 Adam steps over 4 lanes × 16-byte windows, the iteration count sampled from 1–4 per step (Huginn), deep supervision at K = 2 (TRM), autograd through only the last two inner iterations, gains bounded by `3·tanh(g/3)`, the NT-signed efficacies as free parameters. Each step — forward and backward through 25.6M edges × up to 4 iterations × 16 tokens, both directions through the C kernel — takes 4.3 s on 4 CPU cores. Training loss fell from 5.78 to ≈ 3.9 (noisy: the 128→256 head does most of the early learning); the exported block, loaded into the numpy reservoir under a fresh prequential readout on held-out text, moved the online NLL from 4.237 to 4.108 over 512 observations (tail 3.817 → 3.779). Mean gain drifted 0.92 → 0.90; no efficacy changed sign in 24 steps. The pipeline is the point: the block's *update rule* — gains, signs, pooling on the fixed anatomy — is now something the looped-transformer training recipe can learn, which is the R3 rung of the recursive notes applied to a brain graph. A 200-step run at 16 lanes (~1 h on a Mac with the kernel) is the experiment the user can make on real hardware; [`results/block-demo/block.json`](flm-loop/results/block-demo/block.json) holds the demo's log.
 
 
 ## 6. Costs and the path to the real backbone

@@ -228,6 +228,50 @@
     "negative_efficacy_fraction": 0.355500899820036
    },
    "graph": "malecns_v1.0"
+  },
+  {
+   "variant": "loop-signed-rewired",
+   "seconds_per_token": 1.57614968996495,
+   "online": {
+    "online_nll": 3.3679140337187925,
+    "online_accuracy": 0.197265625,
+    "tail_nll": 3.216527020531112,
+    "tail_accuracy": 0.21533203125,
+    "observations": 8192
+   },
+   "probe": {
+    "train_nll": 2.588959745113178,
+    "train_accuracy": 0.30078125,
+    "test_nll": 3.0172592272464875,
+    "test_accuracy": 0.2763671875
+   },
+   "memory_capacity": 2.585589033540188,
+   "memory_per_delay": [
+    0.997178592214158,
+    0.9260029698512291,
+    0.5109000991035749,
+    0.10079188952781726,
+    0.02715566218095078,
+    0.008053136341486522,
+    0.004704903466745125,
+    0.002184986998063021,
+    0.00711831624112369,
+    0.0,
+    0.0014984776150395174,
+    0.0
+   ],
+   "effective_rank": 22.30999215496057,
+   "telemetry": {
+    "iterations": 7.8193359375,
+    "residual": 0.001933997540618293,
+    "state_rms": 0.09154111724637914,
+    "saturation": 0.0,
+    "gain": 4.069553852081299,
+    "spectral_radius": 0.949999988079071,
+    "contraction_bound": 3.2556430816650392,
+    "negative_efficacy_fraction": 0.355500899820036
+   },
+   "graph": "malecns_v1.0-rewired1"
   }
  ]
 }

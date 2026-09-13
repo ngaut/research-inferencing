@@ -1,0 +1,258 @@
+{
+ "graph": {
+  "name": "malecns_v1.0",
+  "neurons": 166700,
+  "directed_edges": 25582938,
+  "mean_in_degree": 153.46693461307737,
+  "isolated_inputs": 370,
+  "row_sum_max": 1.0000003576278687
+ },
+ "neurotransmitters": {
+  "acetylcholine": 103720,
+  "gaba": 22069,
+  "unclear": 2999,
+  "glutamate": 29302,
+  "octopamine": 101,
+  "serotonin": 48,
+  "dopamine": 392,
+  "histamine": 7891,
+  "unknown": 178
+ },
+ "calibrated_gain": 0.9500134315362504,
+ "radius_estimate": {
+  "radius": 0.9999858617406823,
+  "uniform_cosine": 0.0009399696009051002
+ },
+ "config": {
+  "graph": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/flm/cache/malecns_v1",
+  "nt": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/flm/cache/source/neurotransmitters.feather",
+  "text": [
+   "/home/user/research-inferencing/*.md"
+  ],
+  "lanes": 4,
+  "window": 16,
+  "steps": 24,
+  "learning_rate": 0.02,
+  "feedback": 0.8,
+  "step_size": 0.7,
+  "max_iterations": 4,
+  "random_k": true,
+  "supervise": "2",
+  "loop_backprop": 2,
+  "gain_limit": 3.0,
+  "target_radius": 0.95,
+  "embed": 64,
+  "dims": 128,
+  "seed": 0,
+  "eval_tokens": 128,
+  "output": "results/block-demo/block.npz"
+ },
+ "train_log": [
+  {
+   "step": 1,
+   "K": 2,
+   "loss": 5.777772426605225,
+   "gain_mean": 0.9194391369819641,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 6.2
+  },
+  {
+   "step": 2,
+   "K": 4,
+   "loss": 5.58643913269043,
+   "gain_mean": 0.9181848764419556,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 11.9
+  },
+  {
+   "step": 3,
+   "K": 4,
+   "loss": 5.189029693603516,
+   "gain_mean": 0.9167977571487427,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 17.1
+  },
+  {
+   "step": 4,
+   "K": 4,
+   "loss": 4.720414161682129,
+   "gain_mean": 0.9154532551765442,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 22.3
+  },
+  {
+   "step": 5,
+   "K": 2,
+   "loss": 4.661362171173096,
+   "gain_mean": 0.9142001867294312,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 25.6
+  },
+  {
+   "step": 6,
+   "K": 3,
+   "loss": 4.906594753265381,
+   "gain_mean": 0.9129700660705566,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 30.2
+  },
+  {
+   "step": 7,
+   "K": 1,
+   "loss": 3.195340156555176,
+   "gain_mean": 0.9118000864982605,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 32.1
+  },
+  {
+   "step": 8,
+   "K": 2,
+   "loss": 4.181857109069824,
+   "gain_mean": 0.9107829332351685,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 35.4
+  },
+  {
+   "step": 9,
+   "K": 1,
+   "loss": 4.136386394500732,
+   "gain_mean": 0.9098559617996216,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 37.3
+  },
+  {
+   "step": 10,
+   "K": 3,
+   "loss": 4.049988746643066,
+   "gain_mean": 0.908988893032074,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 41.8
+  },
+  {
+   "step": 11,
+   "K": 4,
+   "loss": 4.490350246429443,
+   "gain_mean": 0.9082048535346985,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 47.4
+  },
+  {
+   "step": 12,
+   "K": 3,
+   "loss": 4.153225898742676,
+   "gain_mean": 0.907433807849884,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 51.9
+  },
+  {
+   "step": 13,
+   "K": 4,
+   "loss": 4.50539493560791,
+   "gain_mean": 0.9067193865776062,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 57.1
+  },
+  {
+   "step": 14,
+   "K": 3,
+   "loss": 4.025347709655762,
+   "gain_mean": 0.9060642123222351,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 61.6
+  },
+  {
+   "step": 15,
+   "K": 3,
+   "loss": 3.899367094039917,
+   "gain_mean": 0.9054661393165588,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 66.1
+  },
+  {
+   "step": 16,
+   "K": 2,
+   "loss": 4.788914203643799,
+   "gain_mean": 0.9049507975578308,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 69.4
+  },
+  {
+   "step": 17,
+   "K": 3,
+   "loss": 3.688032627105713,
+   "gain_mean": 0.9044718146324158,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 73.9
+  },
+  {
+   "step": 18,
+   "K": 2,
+   "loss": 3.747870445251465,
+   "gain_mean": 0.9040402770042419,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 77.3
+  },
+  {
+   "step": 19,
+   "K": 3,
+   "loss": 4.146003723144531,
+   "gain_mean": 0.9036126136779785,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 81.8
+  },
+  {
+   "step": 20,
+   "K": 4,
+   "loss": 3.685089111328125,
+   "gain_mean": 0.9031960368156433,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 87.0
+  },
+  {
+   "step": 21,
+   "K": 4,
+   "loss": 4.24550724029541,
+   "gain_mean": 0.9027920961380005,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 92.2
+  },
+  {
+   "step": 22,
+   "K": 2,
+   "loss": 5.516594886779785,
+   "gain_mean": 0.9023697972297668,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 95.5
+  },
+  {
+   "step": 23,
+   "K": 4,
+   "loss": 4.690641403198242,
+   "gain_mean": 0.9019559621810913,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 100.7
+  },
+  {
+   "step": 24,
+   "K": 1,
+   "loss": 3.8528316020965576,
+   "gain_mean": 0.9015279412269592,
+   "negative_efficacy": 0.3555009067058563,
+   "elapsed": 102.7
+  }
+ ],
+ "eval_before": {
+  "online_nll": 4.237128776915968,
+  "online_accuracy": 0.115234375,
+  "tail_nll": 3.817327812598433,
+  "tail_accuracy": 0.125,
+  "observations": 512
+ },
+ "eval_after": {
+  "online_nll": 4.107984786372606,
+  "online_accuracy": 0.115234375,
+  "tail_nll": 3.7794758693420376,
+  "tail_accuracy": 0.1015625,
+  "observations": 512
+ }
+}

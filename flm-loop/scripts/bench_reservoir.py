@@ -63,7 +63,8 @@ def build_variants(args, graph, kernel, nt_efficacy, nt_negative):
         'flm-signed': dict(graph=graph, efficacy=nt_efficacy, calibrate=True, **one),
         'loop-unsigned': dict(graph=graph, efficacy=None, calibrate=False, **loop),
         'loop-signed': dict(graph=graph, efficacy=nt_efficacy, calibrate=True, **loop),
-        'loop-signed-rewired': dict(graph=rewired, efficacy=nt_efficacy, calibrate=True, **loop),
+        'loop-signed-rewired': dict(graph=rewired, efficacy=nt_efficacy, calibrate=True,
+                                    calibrate_on=(graph if args.control_gain == 'same' else rewired), **loop),
         'loop-random-signs': dict(graph=graph, efficacy=random_efficacy, calibrate=True, **loop),
         'loop-signed-ip': dict(graph=graph, efficacy=nt_efficacy, calibrate=True, ip=True, **loop),
     }
@@ -91,16 +92,17 @@ def run_variant(name, cfg, ids, table, args, kernel):
         gain = None
         estimate = None
         if cfg.get('calibrate'):
-            scale, estimate = calibrate_gain(graph, efficacy, target_radius=args.target_radius, iterations=60, kernel=kernel, seed=args.seed)
+            source = cfg.get('calibrate_on', graph)   # 'same' control: calibrate on the real graph, apply to the rewired one
+            scale, estimate = calibrate_gain(source, efficacy, target_radius=args.target_radius, iterations=60, kernel=kernel, seed=args.seed)
             gain = np.full(graph.n, scale, np.float32)
         reservoir = LoopedReservoir(graph, args.embed, dimensions=args.dims, seed=args.interface_seed, lanes=lanes,
-                                    feedback=cfg['feedback'], step_size=cfg['step_size'], max_iterations=cfg['max_iterations'],
-                                    tolerance=cfg['tolerance'], gain=gain, efficacy=efficacy, kernel=kernel)
+                                    drive=0.4 * args.input_scale, feedback=cfg['feedback'], step_size=cfg['step_size'],
+                                    max_iterations=cfg['max_iterations'], tolerance=cfg['tolerance'], gain=gain, efficacy=efficacy, kernel=kernel)
         if estimate is not None:
             reservoir.spectral_radius = float(estimate['radius'] * gain[0])
         if cfg.get('ip'):
-            rule = IntrinsicPlasticity(graph.n, target=args.ip_target, rate=args.ip_rate, smoothing=0.05,
-                                       bounds=(0.05, float(np.abs(reservoir.gain).max())))
+            top = float(np.abs(reservoir.gain).max())
+            rule = IntrinsicPlasticity(graph.n, target=args.ip_target, rate=args.ip_rate, smoothing=0.05, bounds=(0.25 * top, 1.5 * top))
             for t in range(min(args.warmup, steps)):
                 reservoir.step(embeddings[:, t])
                 rule.update(reservoir)
@@ -166,6 +168,9 @@ def main():
     p.add_argument('--max-iterations', type=int, default=8)
     p.add_argument('--tolerance', type=float, default=1e-3)
     p.add_argument('--target-radius', type=float, default=0.95)
+    p.add_argument('--input-scale', type=float, default=1.0, help='multiplies FLM\'s input drive 0.4 (ESN input scaling; 1 = FLM)')
+    p.add_argument('--control-gain', choices=['recalibrate', 'same'], default='recalibrate',
+                   help="rewired signed control: recalibrate its own gain to --target-radius, or reuse the real graph's gain")
     p.add_argument('--warmup', type=int, default=128)
     p.add_argument('--ip-target', type=float, default=0.05)
     p.add_argument('--ip-rate', type=float, default=0.02)
@@ -188,7 +193,7 @@ def main():
     table = np.random.default_rng(args.seed + 7).normal(size=(256, args.embed)).astype(np.float32)
     header = {'graph': graph.summary(), 'kernel': None if kernel is None else kernel.flags, 'corpus_bytes': len(data),
               'lanes': args.lanes, 'tokens': args.tokens, 'neurotransmitter_counts': dict(nt_counts) if nt_counts else None,
-              'negative_efficacy_fraction': nt_negative, 'config': {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}}
+              'negative_efficacy_fraction': nt_negative, 'input_scale': args.input_scale, 'control_gain': args.control_gain, 'config': {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}}
     print(json.dumps({'stage': 'setup', **header}), flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     results = []

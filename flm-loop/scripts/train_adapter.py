@@ -32,6 +32,41 @@ from flmloop.llm import (LoopedFLM, FlyAdapter, FastWeights, backbone_signature,
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def text_records(m, a):
+    """Plain-text mode. Training and validation windows of chunk_tokens+1 tokens are drawn without
+    overlap from --text-corpus; test windows from --text-holdout (or the corpus tail). Train and
+    validation supervise every position; test windows score their second half only, so the
+    fly_adapter_ttt row learns fast weights on a window's first half and is scored on the second."""
+    def tokens(path):
+        return np.asarray(m.encode(path.read_text(errors='replace')), np.int64)
+    corpus = tokens(a.text_corpus)
+    if a.text_holdout:
+        holdout = tokens(a.text_holdout)
+    else:
+        cut = int(len(corpus) * 0.9)
+        corpus, holdout = corpus[:cut], corpus[cut:]
+    span = a.chunk_tokens + 1
+    rng = np.random.default_rng(a.seed)
+
+    def windows(source, count, prefix):
+        starts = rng.permutation((len(source) - span) // span)[:count] * span
+        if len(starts) < count:
+            raise SystemExit(f'{prefix}: text too short for {count} windows of {span} tokens.')
+        return [source[s:s + span] for s in starts], starts
+
+    train_windows, _ = windows(corpus, a.train_chunks + a.val_chunks, 'corpus')
+    test_windows, _ = windows(holdout, a.test_chunks, 'holdout')
+
+    def make(ids, key, score_from):
+        ids = np.asarray(ids, np.int64)
+        return {'key': key, 'ids': ids[:-1], 'labels': ids[1:], 'mask': np.arange(len(ids) - 1) >= score_from,
+                'conversation_sha256': hashlib.sha256(ids.tobytes()).hexdigest()}
+    train = [make(w, f'text:train:{i}', 0) for i, w in enumerate(train_windows[:a.train_chunks])]
+    validation = [make(w, f'text:validation:{i}', 0) for i, w in enumerate(train_windows[a.train_chunks:])]
+    test = [make(w, f'text:test:{i}', a.chunk_tokens // 2) for i, w in enumerate(test_windows)]
+    return {'train': train, 'validation': validation, 'test': test}
+
+
 def shared_prefix(records):
     """Length of the token prefix common to every record, capped so it never reaches any record's
     answer tokens (positions < n get prefix-state features; answers must be pooled per record)."""
@@ -50,6 +85,12 @@ def parse():
     p.add_argument('--nt', type=Path, help='MaleCNS body-neurotransmitters feather (signed efficacies)')
     p.add_argument('--block', type=Path, help='block.npz from train_graph.py (gain, efficacy, output_weight)')
     p.add_argument('--conversations', type=Path, default=ROOT / 'data' / 'conversations.json')
+    p.add_argument('--text-corpus', type=Path, help='plain-text mode: training/validation windows are drawn from this file (no chat template)')
+    p.add_argument('--text-holdout', type=Path, help='plain-text mode: held-out text for the test windows (defaults to the tail of --text-corpus)')
+    p.add_argument('--chunk-tokens', type=int, default=256)
+    p.add_argument('--train-chunks', type=int, default=96)
+    p.add_argument('--val-chunks', type=int, default=16)
+    p.add_argument('--test-chunks', type=int, default=24)
     p.add_argument('--output', type=Path, default=ROOT / 'runs' / 'looped-v1')
     p.add_argument('--device', default='auto')
     p.add_argument('--threads', type=int, default=2)
@@ -131,30 +172,37 @@ def main():
         sha = hashlib.sha256(json.dumps(context + [{'role': 'assistant', 'content': target}], sort_keys=True).encode()).hexdigest()
         return {'key': key, 'ids': ids[:-1], 'labels': ids[1:], 'mask': mask, 'conversation_sha256': sha}
 
-    conversations = json.loads(a.conversations.read_text())['conversations']
-    if a.max_conversations:
-        conversations = conversations[:a.max_conversations]
-    order = np.random.default_rng(a.seed).permutation(len(conversations))
-    n_val = max(1, int(round(len(order) * 0.15))); n_test = max(1, int(round(len(order) * 0.15)))
-    groups = {'test': order[:n_test], 'validation': order[n_test:n_test + n_val], 'train': order[n_test + n_val:]}
-    splits = {}
-    for split, indices in groups.items():
-        items, seen = [], set()
-        for i in indices:
-            lines = conversations[int(i)]
-            messages = [{'role': 'user' if j % 2 == 0 else 'assistant', 'content': s} for j, s in enumerate(lines)]
-            for j in range(1, len(messages), 2):
-                item = record(messages[:j + 1], f'{split}:{int(i)}:{j}')
-                if item is not None and item['conversation_sha256'] not in seen:
-                    seen.add(item['conversation_sha256']); items.append(item)
-        splits[split] = items
+    if a.text_corpus:
+        splits = text_records(m, a)
+    else:
+        conversations = json.loads(a.conversations.read_text())['conversations']
+        if a.max_conversations:
+            conversations = conversations[:a.max_conversations]
+        order = np.random.default_rng(a.seed).permutation(len(conversations))
+        n_val = max(1, int(round(len(order) * 0.15))); n_test = max(1, int(round(len(order) * 0.15)))
+        groups = {'test': order[:n_test], 'validation': order[n_test:n_test + n_val], 'train': order[n_test + n_val:]}
+        splits = {}
+        for split, indices in groups.items():
+            items, seen = [], set()
+            for i in indices:
+                lines = conversations[int(i)]
+                messages = [{'role': 'user' if j % 2 == 0 else 'assistant', 'content': s} for j, s in enumerate(lines)]
+                for j in range(1, len(messages), 2):
+                    item = record(messages[:j + 1], f'{split}:{int(i)}:{j}')
+                    if item is not None and item['conversation_sha256'] not in seen:
+                        seen.add(item['conversation_sha256']); items.append(item)
+            splits[split] = items
     if not all(splits.values()):
         raise SystemExit(f'Every split needs records: {{k: len(v) for k, v in splits.items()}}')
     selection = {split: [{k: v for k, v in x.items() if k in ('key', 'conversation_sha256')} for x in records] for split, records in splits.items()}
     plan = {**{k: len(v) for k, v in splits.items()}, 'epochs': a.epochs, 'seed': a.seed, 'learning_rate': a.learning_rate,
             'batch_size': a.batch_size, 'KL_weight': a.kl_weight, 'lanes': a.lanes,
             'selection': 'lowest validation NLL, separately for fly and matched direct-input control', 'test_policy': 'only after selection',
-            'ttt': m.fast_config, 'conversations_sha256': sha256_file(a.conversations)}
+            'ttt': m.fast_config, 'conversations_sha256': None if a.text_corpus else sha256_file(a.conversations),
+            'text_mode': None if not a.text_corpus else {'corpus': str(a.text_corpus), 'corpus_sha256': sha256_file(a.text_corpus),
+                                                        'holdout': None if not a.text_holdout else str(a.text_holdout),
+                                                        'holdout_sha256': None if not a.text_holdout else sha256_file(a.text_holdout),
+                                                        'chunk_tokens': a.chunk_tokens, 'test_scores_second_half': True}}
     (a.output / 'selection.json').write_text(json.dumps(selection, indent=2)); (a.output / 'plan.json').write_text(json.dumps(plan, indent=2))
     all_ids = [x['ids'] for records in splits.values() for x in records]
     n = shared_prefix([x for records in splits.values() for x in records])

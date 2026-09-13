@@ -162,5 +162,24 @@ class TrainAdapterScriptTests(unittest.TestCase):
             self.assertIn('FLM-Loop:', chat.stdout)
 
 
+class TextModeTests(unittest.TestCase):
+    def test_train_adapter_plain_text_mode(self):
+        backbone = tiny_backbone()
+        with tempfile.TemporaryDirectory() as folder:
+            text = Path(folder) / 'corpus.txt'
+            text.write_text((ROOT / 'README.md').read_text() * 3 + (ROOT.parent / 'fleet-architecture.md').read_text())
+            run = Path(folder) / 'run'
+            cmd = [sys.executable, str(ROOT / 'scripts' / 'train_adapter.py'), '--backbone', str(backbone), '--graph', 'random:300',
+                   '--text-corpus', str(text), '--chunk-tokens', '24', '--train-chunks', '10', '--val-chunks', '3', '--test-chunks', '4',
+                   '--output', str(run), '--device', 'cpu', '--epochs', '1', '--max-iterations', '2', '--lanes', '4', '--threads', '1']
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(ROOT), env={**os.environ, 'OMP_NUM_THREADS': '1'})
+            self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+            report = json.loads((run / 'report.json').read_text())
+            self.assertEqual(report['base']['targets'], 4 * 12)      # test windows score their second half
+            self.assertGreater(report['fly_adapter_ttt']['mean_fast_norm'], 0)  # fast weights learned on first halves
+            manifest = json.loads((run / 'run.json').read_text())
+            self.assertTrue(manifest['training']['text_mode']['test_scores_second_half'])
+
+
 if __name__ == '__main__':
     unittest.main()

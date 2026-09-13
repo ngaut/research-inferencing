@@ -93,10 +93,13 @@ held-out conversation's non-answer prefix and scored on the answer.
 ## What is and is not claimed
 
 The code reproduces FLM at K = 1 (tested bit for bit against FLM's reservoir on the same
-interfaces). The looped and signed variants are measured against degree-matched rewired graphs
-and random signs, on the real connectome, with a linear readout and no language model — see the
-research note for the numbers and their error bars. Nothing here is biological language, and a
-better reservoir is not evidence that a fly understands text.
+interfaces). The looped and signed variants were measured against degree-matched rewired graphs
+and random signs, on the real connectome, with a linear readout and no language model. Result
+(see the research note, §5): the connectome behaves as a memory, not a computer — the real wiring
+beats its rewiring by 0.04–0.09 nats on every run through its slow modes, while looping, signs
+and a nonlinear operating regime stay within the noise of FLM's single step or hurt. The
+language-model path is scripted and tested offline, not run. Nothing here is biological
+language, and a better reservoir would not be evidence that a fly understands text.
 
 ## License
 

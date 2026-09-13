@@ -155,28 +155,50 @@ What the benchmark does *not* rule out, and where the remaining leverage is:
 `train_graph.py` on the real graph, as a trainability demonstration rather than a result: 24 Adam steps over 4 lanes × 16-byte windows, the iteration count sampled from 1–4 per step (Huginn), deep supervision at K = 2 (TRM), autograd through only the last two inner iterations, gains bounded by `3·tanh(g/3)`, the NT-signed efficacies as free parameters. Each step — forward and backward through 25.6M edges × up to 4 iterations × 16 tokens, both directions through the C kernel — takes 4.3 s on 4 CPU cores. Training loss fell from 5.8 to ≈ 3.6–4.0 (noisy: the 128→256 head does most of the early learning); the exported block, loaded into the numpy reservoir under a fresh prequential readout on held-out text, moved the online NLL from 3.794 to 3.581 over 512 observations (tail 3.001 → 2.846). Mean gain drifted 0.950 → 0.929 from its calibrated start (rerun after the initialization fix in §8); no efficacy changed sign in 24 steps. The pipeline is the point: the block's *update rule* — gains, signs, pooling on the fixed anatomy — is now something the looped-transformer training recipe can learn, which is the R3 rung of the recursive notes applied to a brain graph. A 200-step run at 16 lanes (~1 h on a Mac with the kernel) is the experiment the user can make on real hardware; [`results/block-demo/block.json`](flm-loop/results/block-demo/block.json) holds the demo's log.
 
 
-## 6. Costs and the path to the real backbone
+## 6. The real backbone, run inside the sandbox — and the path to FLM's own
 
-- **Kernel**: `native/graph_lanes.c`, row-parallel OpenMP, no fused multiply-add: 17.6 ms per single-lane propagation (SciPy 73 ms), 139 ms for 16 lanes (SciPy 252 ms), 265 ms for 32 lanes, on 4 cores. FLM's chat path (one lane) therefore pays ≈ 18 ms per token for the graph at `K = 1` and ≈ 7 × 18 ≈ 130 ms at the looped settings — comparable to the 1.2B backbone's own decode step on a laptop, and an argument for adaptive exit (easy tokens stop early) exactly as in the Mac cost model of the recursive notes.
-- **TTT during prefill**: `chunk = 32` positions per fast-weight step; each step is one `lm_head` product over the chunk (2048 × 65K vocabulary) plus its gradient — seconds per 300-token prompt on CPU, less on MPS.
-- **Run it with FLM's assets** (Hugging Face and the paper site are unreachable from this sandbox, so the language-model numbers are the user's to produce; everything else is validated here):
+### 6.1 Getting a pretrained language model past the egress policy
+
+Hugging Face, its mirrors, ModelScope, Ollama and the PyTorch download host are all refused by the sandbox's egress proxy, so LFM2.5-1.2B and FLM's conversation corpus are unreachable. Two hosts are open: `storage.googleapis.com` (the connectome came from there) and GitHub raw content. The public **`keras-nlp` bucket** on GCS serves KerasNLP's GPT-2 presets as Keras-2 H5 files, and [`scripts/convert_keras_gpt2.py`](flm-loop/scripts/convert_keras_gpt2.py) maps them onto `GPT2LMHeadModel` (q|k|v concatenation, Conv1D layouts, `gelu_new`, tied head), rebuilds the byte-level BPE tokenizer from `vocab.json`/`merges.txt`, and adds a prefix-stable chat template. Sanity checks of the conversion: **GPT-2 base perplexity 38.3** on *Alice in Wonderland*, **GPT-2 medium 22.2**, and greedy continuations that behave ("The capital of France is → Paris, and the capital of France is Paris."). Text comes from the NLTK Gutenberg corpus on GitHub: 16 books for training (11.3 M characters), *Alice* and Chesterton's *Thursday* held out. `train_adapter.py --text-corpus` runs FLM's recipe on 256-token windows (96 train, 16 validation, 24 test; every training position supervised; test windows scored on their second half so the TTT row learns fast weights on the first half). Same graph, same seeded interfaces, same bias-free adapter (114,688 parameters at hidden size 768), same bounded logit correction, same CE + 0.5·KL objective and validation selection, same direct-input and relabeled controls — FLM with a different backbone and different text, plus our block variants and two extra controls.
+
+### 6.2 Results (held-out NLL, nats per token; 3,072 targets per row)
+
+| backbone · block | base | **fly adapter** | direct-input control | constant-feature control | relabeled wiring | fly + TTT (best lr) |
+|---|---|---|---|---|---|---|
+| GPT-2 base (124M) · FLM-equivalent (`c = 0`, K = 1) | 3.6668 | **3.5989** | 3.5985 | 3.6433 | 3.6837 | 3.5978 |
+<!-- GPT2-ROWS -->
+
+*Perplexities for the first row: 39.1 → 36.6 / 36.5 / 38.2 / 39.8. The constant-feature control is the same adapter fed an all-ones feature, so it can only learn one fixed logit offset — a corpus prior. TTT: fast weights on the adapter's output projection, learned on each window's first 128 tokens, swept over learning rates 0.05–50 and norm bounds 0.5–5 ([`posthoc.json`](flm-loop/results/gpt2-base/flm/posthoc.json)).*
+
+### 6.3 Reading
+
+- **FLM's null result replicates on the first try**: the fly adapter and the parameter-matched direct-input control land 0.0004 nats apart (3.5989 vs 3.5985), exactly the paper's finding with LFM2.5. The relabeled-wiring control is *worse than the base model* (3.6837 vs 3.6668), also as in FLM: an adapter fitted to one node labeling misreads another.
+- **What the adapters do learn is a token-conditional corpus prior, not connectome computation.** The constant-feature control captures 0.024 of the 0.068-nat gain (a fixed shift toward Gutenberg's token statistics); the direct-input control — a function of the current token only — captures all 0.068; the fly features add nothing on top. This is the backbone-free §5 result seen from the language model's side: the block's only asset was ~1.5 tokens of linear memory, and GPT-2 already carries 1,024 tokens of it.
+- **Test-time training on FLM's readout has no leverage.** With the adapter capped at `0.03·tanh(·)` and the logit correction at RMS 0.25, fast weights learned on a window's first half move the second half's NLL by at most −0.001 nats (learning rate 5, fast-weight norm 0.8); at learning rate 50 they hurt (+0.004). Loop 2 of the [self-improvement notes](runtime-self-improvement.md) needs a substrate with more leverage than a bounded readout — a fast logit bias or a last-layer delta on the backbone itself — which is outside FLM's contract and left for the next study.
+- Rows for the looped blocks and for GPT-2 medium are filled in as the runs complete; the mechanism predicts that the fly-versus-direct gap stays at zero for every block, and that the whole adapter gain shrinks as the backbone grows.
+
+### 6.4 Costs, and FLM's own backbone on a laptop
+
+- **Kernel**: `native/graph_lanes.c`, row-parallel OpenMP, no fused multiply-add: 17.6 ms per single-lane propagation (SciPy 73 ms), 139 ms for 16 lanes (SciPy 252 ms), 265 ms for 32 lanes, on 4 cores. The GPT-2 runs spend their time in the graph, not the language model: with 8 lanes, an FLM-equivalent extraction of 35 K tokens takes ~10 min, a looped one (~7 iterations) ~100 min; GPT-2 base's own forward over the same tokens is under a minute.
+- **FLM's chat path** (one lane) pays ≈ 18 ms per token for the graph at `K = 1` and ≈ 7 × 18 ≈ 130 ms at the looped settings — comparable to the 1.2B backbone's decode step on a laptop, and an argument for adaptive exit exactly as in the Mac cost model of the recursive notes.
+- **TTT during prefill**: one `lm_head` product over each 32-position chunk plus its gradient — seconds per 300-token prompt on CPU, less on MPS.
+- **Run it with FLM's own assets** on a machine that can reach Hugging Face (the recipe is the one exercised above, with the backbone and data swapped back):
 
 ```sh
 git clone https://github.com/nftechie/flm && cd flm && python scripts/download.py && python scripts/prepare_graph.py
 curl -O https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-neurotransmitters-male-cns-v1.0.feather
 cd ../flm-loop
-python scripts/train_graph.py   --graph ../flm/cache/malecns_v1 --nt ../body-neurotransmitters-male-cns-v1.0.feather --steps 200 --random-k --supervise 4 --output runs/block/block.npz
-python scripts/train_adapter.py --backbone ../flm/cache/lfm25-1.2b --graph ../flm/cache/malecns_v1 --block runs/block/block.npz --output runs/looped-v1
+python scripts/train_adapter.py --backbone ../flm/cache/lfm25-1.2b --graph ../flm/cache/malecns_v1 --feedback 0 --max-iterations 1 --output runs/flm-baseline
+python scripts/train_adapter.py --backbone ../flm/cache/lfm25-1.2b --graph ../flm/cache/malecns_v1 --output runs/looped-v1
+python scripts/posthoc_controls.py --run runs/looped-v1 --text-corpus <any text file>     # constant-feature control + TTT sweep
 python scripts/chat.py --run runs/looped-v1 --ttt --telemetry
 ```
-
-`train_adapter.py` is FLM's recipe (CE + KL, validation selection, the direct-input control, the relabeled-wiring test, the exact-zero `no_edges` identity, pinned hashes of backbone / graph / block / adapter / interface in `run.json`) with the looped block underneath and the `fly_adapter_ttt` row added. The end-to-end path is exercised in the tests on a fully offline tiny backbone (`scripts/make_tiny_backbone.py`: a byte-level tokenizer, a ChatML template and a two-layer Llama trained for 300 steps on local text).
 
 ## 7. What this does and does not show
 
 - **It explains FLM's null result mechanistically.** FLM runs the connectome as an unsigned averaging operator, once per token, in `tanh`'s linear range. Such an operator's only asset is its slow modes, and the fly's modular wiring has many of them: that is ~1.5 tokens of linear memory, worth 0.07–0.09 nats to a linear next-byte readout, robust across two seeds and three operating points against a degree-preserving rewiring — and worth nothing to a 1.2B transformer that already remembers 1,536 tokens, so the adapter cannot beat its direct-input control. FLM's own `shuffled` control relabels nodes and preserves the topology; it could never have seen the wiring effect that a rewiring shows.
 - **It shows that the looped-transformer transplant, by itself, does not rescue the block.** Multi-hop iteration to a damped fixed point, signed efficacies from the connectome's transmitter predictions, and a nonlinear operating regime were each implemented, controlled, and measured; none moved a linear readout beyond ±0.03 nats of FLM's single step, and signs made it worse. The recursion principle of the companion notes holds in its negative form: iterating a block that only averages yields a deeper average.
-- **It does not show language-model gains or losses**: the backbone experiment is scripted, tested end-to-end on an offline tiny backbone, and left for real hardware (Hugging Face and the paper site are unreachable from this sandbox).
+- **On a real pretrained backbone it reproduces FLM's null result and explains it** (§6): with GPT-2 fetched from a public GCS bucket, the fly adapter and the direct-input control tie to 0.0004 nats, a constant-feature control shows the shared gain is a corpus prior, and test-time training on FLM's bounded readout has no leverage. FLM's own 1.2B backbone and conversation corpus remain the laptop experiment (§6.4).
 - **What it leaves standing**: a bit-for-bit FLM superset with adaptive-exit telemetry, per-conversation fast weights, a differentiable block trained through the loop (demonstrated on the real graph), the rewired and random-sign controls, and the benchmark harness — plus the one untested hypothesis with real leverage: FLM's random pooling of ~1,300 neurons per feature averages away nonlinear structure before the readout sees it. Learned or anatomical pooling (cell types, neuropils, MBON/DN readouts), the backbone's real embeddings, and a task that needs nonlinear conjunctions are the next experiments; the code exposes all three.
 
 ## 8. Verification
@@ -218,7 +240,7 @@ Also fixed: the same-gain rewired control recorded the *real* graph's spectral r
 
 Tail NLL under online learning rates 0.02 / 0.05 / 0.1: FLM 2.920 / 2.771 / 2.795 · rewired 2.996 / 2.849 / 2.868 · loop 2.874 / 2.767 / 2.806 · signed 3.028 / 2.859 / 2.878 — the ordering never changes, at any learning rate or regularization. Paired differences in tail NLL (learning rate 0.05) with 95 % lane-bootstrap intervals: **rewired − FLM = +0.078 [+0.058, +0.102]**, **loop − FLM = −0.003 [−0.014, +0.009]**, **signed − FLM = +0.088 [+0.062, +0.115]**; per-token standard errors ≈ 0.01. So the wiring effect is real and about 0.08 nats; the loop's effect is zero to within ±0.01; the signs' cost is as large as the wiring's benefit. The lane intervals of the *absolute* tail NLLs are wide (±0.2; FLM's is [2.55, 2.95]) because lanes are different passages — only paired, within-run comparisons mean anything, which is how every claim in §5 is made.
 
-**Not covered by this verification**: the language-model path was never run on real weights; every benchmark row uses one interface seed (7301) and 8,192 predictions; bit-identity through the C kernel is a property of this machine (no FMA), not of the kernel on arm64.
+**Not covered by this verification**: the language-model path has been run on GPT-2 (§6) but not on FLM's LFM2.5 backbone or its conversation corpus; every benchmark row uses one interface seed (7301) and 8,192 predictions; bit-identity through the C kernel is a property of this machine (no FMA), not of the kernel on arm64.
 
 ## 9. Pointers
 

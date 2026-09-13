@@ -45,7 +45,7 @@ z_{k+1} = (1-h)·z_k + h · tanh( g ⊙ W (s ⊙ (m_t + c·z_k)) )   k = 0..K-1,
 x_t     = z_K,   f_t = rms( pool(x_t) )
 ```
 
-- `c` is the loop feedback (the "re-injected input" is `m_t`; the loop variable is `z`); `h` a damping step; `g`, `s` per-neuron postsynaptic gain and presynaptic efficacy; `d = 1-c`. With `c = 0` or `K = 1`, `g = s = 1`, `h = 1` this is FLM, **bit for bit** on the same seeded interfaces (tested against FLM's own `Reservoir` on all three controls), so an FLM adapter transfers unchanged and every looped variant is a strict superset.
+- `c` is the loop feedback (the "re-injected input" is `m_t`; the loop variable is `z`); `h` a damping step; `g`, `s` per-neuron postsynaptic gain and presynaptic efficacy; `d = 1-c`. With `c = 0`, `g = s = 1`, `h = 1` this is FLM on the same seeded interfaces — bit-identical on the SciPy path and, on this x86-64 machine, through the C kernel as well (tested against a transcription of FLM's `Reservoir` on the toy graphs and on the real one; on FMA hardware the kernel forbids contraction while SciPy may fuse, so agreement there is to rounding) — so an FLM adapter transfers unchanged and every looped variant is a strict superset. `K = 1` with `c ≠ 0` is *not* FLM: the warm start enters the drive as `c·x_{t-1}`.
 - Two readings of the same loop: a Universal-Transformer-style weight-tied depth recursion, and an Euler integration of the rate model `dz/dt = -z + tanh(gWs(m + cz))` — the textbook way to run a connectome. FLM's single step is one Euler step of size 1. Iteration `k` carries the input `k` synapses into the wiring *within* the token.
 - **Convergence**: rows of `W` sum to ≤ 1 and `tanh` is 1-Lipschitz, so `|c|·max|g|·max|s| < 1` proves a unique fixed point per token (contraction in the max norm; unit test checks geometric decay at rate `c`). Signed, gain-calibrated graphs exceed that loose bound; then convergence is local, governed by the spectral radius of `c·gWs`, and the **residual is the canary** (`telemetry()` reports iterations used, residual, saturation, the bound and the spectral estimate). Adaptive exit freezes converged lanes, so a sequence's result never depends on its batch companions — FLM's lane-independence invariant, kept.
 
@@ -78,7 +78,7 @@ Setup ([`scripts/bench_reservoir.py`](flm-loop/scripts/bench_reservoir.py)): Eng
 
 | variant | online NLL | tail NLL | probe NLL | probe acc | memory | eff. rank | iters | state RMS |
 |---|---|---|---|---|---|---|---|---|
-| direct input (bigram baseline) | 3.350 · *3.382* | 3.064 | 2.940 | 0.244 | 1.06 · *1.11* | 22.3 | — | — |
+| direct input (bigram baseline) | 3.350 · *3.382* | 3.064 | 2.940 · *3.120* | 0.244 | 1.06 · *1.11* | 22.3 | — | — |
 | **FLM** (K = 1, unsigned) | **3.273** · *3.311* | 2.980 | **2.809** · *2.959* | 0.274 | 2.67 · *2.89* | 23.8 | 1 | 0.098 |
 | FLM on rewired graph | 3.347 · *3.402* | 3.065 | 2.903 · *3.069* | 0.269 | 2.36 · *2.34* | 21.1 | 1 | 0.095 |
 | FLM + NT signs (gain 0.95) | 3.340 | 3.055 | 2.852 | 0.275 | 2.78 | 23.7 | 1 | 0.092 |
@@ -106,13 +106,13 @@ Twelve largest eigenvalue magnitudes of the propagation operator (ARPACK on the 
 | degree-preserving rewiring (seed 0 / seed 1) | 1.000 then a cliff: 0.166 × 11 / 0.165 × 11 |
 | real `W` × NT signs | 1.000 · 1.000 · 0.915 · 0.914 · 0.912 · 0.910 · 0.848 · 0.847 · 0.835 · 0.835 · 0.835 · 0.830 |
 
-The rewired graph is a textbook random matrix: one Perron mode (the mean) and a bulk whose radius, 0.166, equals the median row L2 norm of `W` (0.163). Everything but the graph-wide average decays by a factor 6 per propagation, times FLM's 0.6 leak — one token of memory, then nothing. The real connectome has **a dense band of modes above 0.92** (three at 1.0: near-closed subsystems; the band is the graph's modularity — hemispheres, optic lobes, nerve cord, mushroom body), each decaying by only 0.55–0.6 per token, so the recent past stays linearly decodable for two or three tokens. Signs remove half of that band (six modes above 0.91 instead of twelve), which is exactly why the signed variants lose memory and lose nats in this regime.
+The rewired graph is a textbook random matrix: one Perron mode (the mean) and a bulk whose radius, 0.166, coincides with the median row L2 norm of `W` (0.163) — the scale of a sum of ~150 random-signed weights. Everything but the graph-wide average decays by a factor 6 per propagation, times FLM's 0.6 leak — one token of memory, then nothing. The real connectome has **a dense band of modes above 0.92** (three at 1.0: near-closed subsystems; the band is the graph's modularity — hemispheres, optic lobes, nerve cord, mushroom body), each decaying by only 0.55–0.6 per token, so the recent past stays linearly decodable for two or three tokens. Signs remove half of that band (six modes above 0.91 instead of twelve), which is exactly why the signed variants lose memory and lose nats in this regime.
 
 So the fly wiring's *entire* measurable contribution in FLM's formulation is ~1.5 tokens of linear memory, worth 0.07–0.09 nats to a linear next-byte readout — and worth nothing to a 1.2B transformer that already carries 1,536 tokens of context, which is why FLM's adapter cannot beat its direct-input control. The diagnosis of §2 stands, with the mechanism now named: **an averaging operator with slow modes is a memory, not a computer**, and neither iterating it nor signing it changes that while the block stays linear.
 
 ### 5.3 Why the block stays linear, and the fix
 
-State RMS is 0.02–0.10 in every row above. FLM's drive `0.4·code[bins]·sign` has unit-RMS codes, but `W` averages ~150 random-sign inputs per neuron: the post-averaging drive is 0.4 × 0.163 ≈ 0.065 — `tanh` never bends. In echo-state terms FLM's *input scaling* is set ~10× too low for the operator's normalization. Sweeping the input scale on the real graph (4 lanes × 40 tokens):
+State RMS is 0.02–0.10 in every row above. FLM's drive `0.4·code[bins]·sign` has unit-RMS codes, but `W` averages ~150 random-sign inputs per neuron: the post-averaging drive is 0.4 × the RMS row L2 norm of `W` (0.244) ≈ 0.098 per neuron (measured 0.098) — `tanh` never bends. In echo-state terms FLM's *input scaling* is set ~10× too low for the operator's normalization. Sweeping the input scale on the real graph (4 lanes × 40 tokens):
 
 | input scale | FLM state RMS · \|x\| > 0.5 · saturated | looped unsigned | looped + NT signs |
 |---|---|---|---|
@@ -179,6 +179,38 @@ python scripts/chat.py --run runs/looped-v1 --ttt --telemetry
 - **It does not show language-model gains or losses**: the backbone experiment is scripted, tested end-to-end on an offline tiny backbone, and left for real hardware (Hugging Face and the paper site are unreachable from this sandbox).
 - **What it leaves standing**: a bit-for-bit FLM superset with adaptive-exit telemetry, per-conversation fast weights, a differentiable block trained through the loop (demonstrated on the real graph), the rewired and random-sign controls, and the benchmark harness — plus the one untested hypothesis with real leverage: FLM's random pooling of ~1,300 neurons per feature averages away nonlinear structure before the readout sees it. Learned or anatomical pooling (cell types, neuropils, MBON/DN readouts), the backbone's real embeddings, and a task that needs nonlinear conjunctions are the next experiments; the code exposes all three.
 
-## 8. Pointers
+## 8. Verification
+
+*A second, adversarial pass over the code and the claims: what it found, what changed, and what checks out independently. Artifacts: [`results/verification.json`](flm-loop/results/verification.json), [`results/readout_sweep.json`](flm-loop/results/readout_sweep.json).*
+
+**Code review** (all modules, single pass). Ten findings; four were correctness defects, each now fixed with a regression test (42 tests):
+
+1. **Gain calibration was silently undone by the gain bound.** `TorchLoopedReservoir` stored the calibrated gain as the raw pre-`tanh` parameter, so a "calibrated to 0.95" block actually started at `3·tanh(0.95/3) = 0.919` — confirmed against the committed demo log, whose first `gain_mean` was exactly that number. Fixed by initializing the raw parameter at `limit·atanh(gain/limit)`; the §5.5 demonstration was rerun.
+2. **"K = 1 reproduces FLM" was false for `c ≠ 0`**: the warm start enters the drive as `c·x_{t-1}`, so `K = 1, c = 0.8` computes `0.92x + 0.08u`, not FLM's `0.6x + 0.4u`. The correct statement — `c = 0`, any `K` — is now in the docstring, both READMEs and §3, with a test for both directions.
+3. **`prompt_nll`'s test-time training was not causal on multi-turn input**: it learned on every non-assistant position, including later user turns whose hidden states had already attended to the answer being scored. Now restricted to positions before the first assistant token; tested on a two-turn conversation. `train_adapter.py`'s `fly_adapter_ttt` row builds one record per assistant turn and was already causal.
+4. **Deep supervision below the truncated-backprop window trained only the head**: supervised iteration counts earlier than the last `loop_backprop` iterations were detached, so the block received no gradient from them. The window now extends to the earliest supervised count, and `supervise = 0` (which aliased the final state) is rejected. This affected the §5.5 demo at `K = 4` steps; rerun.
+
+Also fixed: the same-gain rewired control recorded the *real* graph's spectral radius in its telemetry; `train_adapter.py`'s shared prefix could extend into answer tokens when every record opens identically (now capped before the first answer token); frozen arrays in the torch twin were plain attributes, invisible to `.to()` and `state_dict()` (now buffers); three verbatim copies of the hashing helper; and two efficiency defects — converged lanes were still propagated on every iteration (now only active lanes run, results bit-identical, kernel time ~1.6× lower at the benchmark's 4.8 mean iterations) and `feedback = 0` ran a second, identical iteration per token. Left as in FLM: `chat.py` drops a turn whose reply is empty.
+
+**Independent checks on the real graph.**
+
+- *The slow-mode mechanism, observed directly.* One random kick, then silence; state RMS per token (FLM dynamics, 0.6 leak):
+
+  | operator | after kick | +1 | +2 | +3 | +4 | ratios |
+  |---|---|---|---|---|---|---|
+  | real `W` | 0.0947 | 0.0220 | 0.0088 | 0.0035 | 0.0017 | 0.23 · 0.40 · 0.40 · 0.49 → 0.56 |
+  | rewired | 0.0943 | 0.0095 | 0.0010 | 0.0002 | 0.0001 | 0.10 · 0.10 · 0.20 → 0.6 (the mean mode alone) |
+  | real `W` × NT signs, gain 0.95 | 0.0903 | 0.0177 | 0.0056 | 0.0016 | 0.0006 | 0.20 · 0.31 · 0.28 · 0.42 → 0.48 |
+
+  Two tokens after an input the real wiring retains 9× the signal of its rewiring, three tokens after, 17×; the asymptotic per-token ratio 0.55–0.56 is the slow band (0.92–1.0) times the 0.6 leak. Signs cut the retained signal roughly in half, as §5.2 inferred from the spectrum.
+- *FLM equivalence on the actual data*: a transcription of FLM's `Reservoir.step` and `LoopedReservoir(c = 0)` agree **bit for bit** on the 166,700-node graph — through SciPy and, on this x86-64 machine, through the C kernel as well.
+- *Spectrum scale*: the rewired bulk radius (0.1655 / 0.1647 on two rewirings) coincides with the median row L2 norm 0.1635; the circular-law scale `sqrt(Σw²/n) = 0.244` is instead what sets the post-averaging drive — 0.4 × 0.244 = 0.098, measured 0.098 — so §2 and §5.3 now carry that number (the draft's 0.065 used the wrong norm).
+- *Numbers*: a script compared 115 table entries in this note against the JSON results; one omission (seed-1 direct probe) was found and fixed.
+
+<!-- ROBUSTNESS -->
+
+**Not covered by this verification**: the language-model path was never run on real weights; every benchmark row uses one interface seed (7301) and 8,192 predictions; bit-identity through the C kernel is a property of this machine (no FMA), not of the kernel on arm64.
+
+## 9. Pointers
 
 FLM: [repository](https://github.com/nftechie/flm) · MaleCNS v1.0: [downloads](https://male-cns.janelia.org/download/) (CC BY 4.0) · looped/recursive models and TTT: [recursive-self-improvement.md](recursive-self-improvement.md), [runtime-self-improvement.md](runtime-self-improvement.md) · code: [`flm-loop/`](flm-loop/) (36 unit tests, `python -m unittest discover -s tests`).

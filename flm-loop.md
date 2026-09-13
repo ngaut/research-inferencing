@@ -88,7 +88,7 @@ Setup ([`scripts/bench_reservoir.py`](flm-loop/scripts/bench_reservoir.py)): Eng
 | loop + random signs (same 35.6 %) | 3.361 | 3.074 | 2.915 | 0.253 | 2.30 | 20.7 | 4.8 | 0.020 |
 | loop + NT signs + intrinsic plasticity | = loop + NT signs (the rule was a no-op, see below) | | | | | | | |
 
-*Italics: seed 1 (different lane offsets, byte embeddings, rewiring). Online NLL is over 8,192 predictions; its standard error is ≈ 0.03 nats, so differences under ~0.06 are noise.* Cost on 4 CPU cores: 0.20 s per 16-lane token at K = 1, 0.9–1.5 s looped.
+*Italics: seed 1 (different lane offsets, byte embeddings, rewiring). Online NLL is over 8,192 predictions; unpaired, its run-to-run wobble is ≈ 0.03 nats, so treat unpaired differences under ~0.06 as noise — the paired lane-bootstrap intervals in §8 resolve the actual effects to ±0.02.* Cost on 4 CPU cores: 0.20 s per 16-lane token at K = 1, 0.9–1.5 s looped.
 
 Three facts survive both seeds:
 
@@ -152,7 +152,7 @@ What the benchmark does *not* rule out, and where the remaining leverage is:
 
 ### 5.5 Training the block through the loop
 
-`train_graph.py` on the real graph, as a trainability demonstration rather than a result: 24 Adam steps over 4 lanes × 16-byte windows, the iteration count sampled from 1–4 per step (Huginn), deep supervision at K = 2 (TRM), autograd through only the last two inner iterations, gains bounded by `3·tanh(g/3)`, the NT-signed efficacies as free parameters. Each step — forward and backward through 25.6M edges × up to 4 iterations × 16 tokens, both directions through the C kernel — takes 4.3 s on 4 CPU cores. Training loss fell from 5.78 to ≈ 3.9 (noisy: the 128→256 head does most of the early learning); the exported block, loaded into the numpy reservoir under a fresh prequential readout on held-out text, moved the online NLL from 4.237 to 4.108 over 512 observations (tail 3.817 → 3.779). Mean gain drifted 0.92 → 0.90; no efficacy changed sign in 24 steps. The pipeline is the point: the block's *update rule* — gains, signs, pooling on the fixed anatomy — is now something the looped-transformer training recipe can learn, which is the R3 rung of the recursive notes applied to a brain graph. A 200-step run at 16 lanes (~1 h on a Mac with the kernel) is the experiment the user can make on real hardware; [`results/block-demo/block.json`](flm-loop/results/block-demo/block.json) holds the demo's log.
+`train_graph.py` on the real graph, as a trainability demonstration rather than a result: 24 Adam steps over 4 lanes × 16-byte windows, the iteration count sampled from 1–4 per step (Huginn), deep supervision at K = 2 (TRM), autograd through only the last two inner iterations, gains bounded by `3·tanh(g/3)`, the NT-signed efficacies as free parameters. Each step — forward and backward through 25.6M edges × up to 4 iterations × 16 tokens, both directions through the C kernel — takes 4.3 s on 4 CPU cores. Training loss fell from 5.8 to ≈ 3.6–4.0 (noisy: the 128→256 head does most of the early learning); the exported block, loaded into the numpy reservoir under a fresh prequential readout on held-out text, moved the online NLL from 3.794 to 3.581 over 512 observations (tail 3.001 → 2.846). Mean gain drifted 0.950 → 0.929 from its calibrated start (rerun after the initialization fix in §8); no efficacy changed sign in 24 steps. The pipeline is the point: the block's *update rule* — gains, signs, pooling on the fixed anatomy — is now something the looped-transformer training recipe can learn, which is the R3 rung of the recursive notes applied to a brain graph. A 200-step run at 16 lanes (~1 h on a Mac with the kernel) is the experiment the user can make on real hardware; [`results/block-demo/block.json`](flm-loop/results/block-demo/block.json) holds the demo's log.
 
 
 ## 6. Costs and the path to the real backbone
@@ -207,7 +207,16 @@ Also fixed: the same-gain rewired control recorded the *real* graph's spectral r
 - *Spectrum scale*: the rewired bulk radius (0.1655 / 0.1647 on two rewirings) coincides with the median row L2 norm 0.1635; the circular-law scale `sqrt(Σw²/n) = 0.244` is instead what sets the post-averaging drive — 0.4 × 0.244 = 0.098, measured 0.098 — so §2 and §5.3 now carry that number (the draft's 0.065 used the wrong norm).
 - *Numbers*: a script compared 115 table entries in this note against the JSON results; one omission (seed-1 direct probe) was found and fixed.
 
-<!-- ROBUSTNESS -->
+**Readout robustness and error bars.** The four rows that carry the conclusions (FLM, its rewiring, the unsigned loop, the signed loop; seed-0 settings) were rerun after the fixes with their features cached ([`results/bench_reservoir_check.json`](flm-loop/results/bench_reservoir_check.json)), then re-scored under three online learning rates and three probe regularizations ([`results/readout_sweep.json`](flm-loop/results/readout_sweep.json)), with paired bootstrap intervals over the 16 lanes — the independent text samples. The default corpus (this repository's notes) had grown from 158,623 to 195,445 bytes since the first run (this note was added), so the rerun samples different passages: absolute levels move by ~0.2 nats, the comparisons do not. The benchmark header now records the corpus hash and file list.
+
+| rerun, new text sample | online NLL | tail NLL | probe NLL at l2 = 10⁻³ / 3·10⁻³ / 10⁻² | memory |
+|---|---|---|---|---|
+| FLM (K = 1) | 3.101 | 2.771 | 2.566 / 2.619 / 2.775 | 2.92 |
+| FLM on rewired graph | 3.195 | 2.849 | 2.626 / 2.691 / 2.857 | 2.66 |
+| loop, unsigned | 3.080 | 2.767 | 2.580 / 2.630 / 2.769 | 2.78 |
+| loop + NT signs | 3.196 | 2.859 | 2.644 / 2.715 / 2.880 | 2.79 |
+
+Tail NLL under online learning rates 0.02 / 0.05 / 0.1: FLM 2.920 / 2.771 / 2.795 · rewired 2.996 / 2.849 / 2.868 · loop 2.874 / 2.767 / 2.806 · signed 3.028 / 2.859 / 2.878 — the ordering never changes, at any learning rate or regularization. Paired differences in tail NLL (learning rate 0.05) with 95 % lane-bootstrap intervals: **rewired − FLM = +0.078 [+0.058, +0.102]**, **loop − FLM = −0.003 [−0.014, +0.009]**, **signed − FLM = +0.088 [+0.062, +0.115]**; per-token standard errors ≈ 0.01. So the wiring effect is real and about 0.08 nats; the loop's effect is zero to within ±0.01; the signs' cost is as large as the wiring's benefit. The lane intervals of the *absolute* tail NLLs are wide (±0.2; FLM's is [2.55, 2.95]) because lanes are different passages — only paired, within-run comparisons mean anything, which is how every claim in §5 is made.
 
 **Not covered by this verification**: the language-model path was never run on real weights; every benchmark row uses one interface seed (7301) and 8,192 predictions; bit-identity through the C kernel is a property of this machine (no FMA), not of the kernel on arm64.
 

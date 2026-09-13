@@ -2,8 +2,10 @@
 """Backbone-free benchmark on the fly connectome: does a looped, signed block carry more
 next-token information than FLM's one-step unsigned reservoir, and does the real wiring matter?
 
-Input: English text as bytes, one fixed random embedding per byte (the stand-in for the
-backbone's token embedding). Each variant turns the byte stream into 128-d features; the
+Input: English text as bytes (by default this repository's notes at the time of the run — the
+header records the files and a corpus hash, and absolute NLLs shift by ~0.2 nats between text
+samples, so compare rows within one run), one fixed random embedding per byte (the stand-in
+for the backbone's token embedding). Each variant turns the byte stream into 128-d features; the
 metrics ask what a linear readout can get out of them:
   online_nll   prequential next-byte log loss of a readout trained as it goes (the test-time-
                training readout; lower is better; the `direct` row is the bigram baseline)
@@ -198,7 +200,10 @@ def main():
     data = load_text(args.text)
     ids = make_lanes(data, args.lanes, args.tokens, args.seed)
     table = np.random.default_rng(args.seed + 7).normal(size=(256, args.embed)).astype(np.float32)
+    import hashlib
     header = {'graph': graph.summary(), 'kernel': None if kernel is None else kernel.flags, 'corpus_bytes': len(data),
+              'corpus_sha256': hashlib.sha256(data).hexdigest(),
+              'corpus_files': sorted(f for pattern in args.text for f in glob.glob(pattern)),
               'lanes': args.lanes, 'tokens': args.tokens, 'neurotransmitter_counts': dict(nt_counts) if nt_counts else None,
               'negative_efficacy_fraction': nt_negative, 'input_scale': args.input_scale, 'control_gain': args.control_gain, 'config': {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}}
     print(json.dumps({'stage': 'setup', **header}), flush=True)

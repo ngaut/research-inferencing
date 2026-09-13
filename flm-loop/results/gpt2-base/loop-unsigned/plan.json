@@ -1,0 +1,28 @@
+{
+  "train": 96,
+  "validation": 16,
+  "test": 24,
+  "epochs": 3,
+  "seed": 27,
+  "learning_rate": 0.0003,
+  "batch_size": 32,
+  "KL_weight": 0.5,
+  "lanes": 8,
+  "selection": "lowest validation NLL, separately for fly and matched direct-input control",
+  "test_policy": "only after selection",
+  "ttt": {
+    "learning_rate": 0.05,
+    "decay": 0.0,
+    "max_norm": 0.5,
+    "chunk": 32
+  },
+  "conversations_sha256": null,
+  "text_mode": {
+    "corpus": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/corpus/gutenberg_train.txt",
+    "corpus_sha256": "223702f457b69090c644f1e420e7916677709d9248fdc5ca6737aaa76b7d7243",
+    "holdout": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/corpus/gutenberg_test.txt",
+    "holdout_sha256": "73a8f235f29264078907069dd6798874600c454165ba284053829cca79554d79",
+    "chunk_tokens": 256,
+    "test_scores_second_half": true
+  }
+}

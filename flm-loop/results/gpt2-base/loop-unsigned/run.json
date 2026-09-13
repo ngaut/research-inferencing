@@ -1,0 +1,67 @@
+{
+  "schema": "flm-loop-1",
+  "backbone": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/backbones/gpt2-base",
+  "backbone_signature": "82a23ee3fc2288b767be334a6b7145a221e4770e913275cdd50e7698d42df985",
+  "graph": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/flm/cache/malecns_v1",
+  "graph_name": "malecns_v1.0",
+  "graph_signature": "278d0d83996d553d8949a595984137fb0caa61f71c4a5a0c010532b7b768e753",
+  "block_signature": "1478040c2a50a1a0a95e74dfcec71d1242a7dd7f8eef93ae58fc518a980a8007",
+  "block_file": null,
+  "block_source": null,
+  "adapter_sha256": "d31e622616bb3cefb0cbdc05a929e2afe80ebf8035d09b0511c84f6822bd39ee",
+  "interface": {
+    "seed": 7301,
+    "dimensions": 128,
+    "input_gain": 0.4,
+    "recurrence_gain": 0.6,
+    "adapter_scale": 0.03,
+    "max_logit_rms": 0.25,
+    "feedback": 0.8,
+    "step_size": 0.7,
+    "max_iterations": 8,
+    "tolerance": 0.001
+  },
+  "system_text": "You are FLM-Loop, an experimental assistant: a pretrained language model with a trained readout of a fly connectome run as a looped block. Answer directly and concisely. You are software, not a biological fly. Say when you do not know.",
+  "context_tokens": 1536,
+  "sampling": {
+    "temperature": 0.4,
+    "top_k": 50,
+    "top_p": 0.9,
+    "repetition_penalty": 1.05
+  },
+  "training": {
+    "train": 96,
+    "validation": 16,
+    "test": 24,
+    "epochs": 3,
+    "seed": 27,
+    "learning_rate": 0.0003,
+    "batch_size": 32,
+    "KL_weight": 0.5,
+    "lanes": 8,
+    "selection": "lowest validation NLL, separately for fly and matched direct-input control",
+    "test_policy": "only after selection",
+    "ttt": {
+      "learning_rate": 0.05,
+      "decay": 0.0,
+      "max_norm": 0.5,
+      "chunk": 32
+    },
+    "conversations_sha256": null,
+    "text_mode": {
+      "corpus": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/corpus/gutenberg_train.txt",
+      "corpus_sha256": "223702f457b69090c644f1e420e7916677709d9248fdc5ca6737aaa76b7d7243",
+      "holdout": "/tmp/claude-0/-home-user-research-inferencing/5d039122-e13c-5ed8-ab7c-854901860131/scratchpad/corpus/gutenberg_test.txt",
+      "holdout_sha256": "73a8f235f29264078907069dd6798874600c454165ba284053829cca79554d79",
+      "chunk_tokens": 256,
+      "test_scores_second_half": true
+    },
+    "shared_prefix_tokens": 0,
+    "train_targets": 24576,
+    "test_targets": 3072
+  },
+  "trainable_parameters": 114688,
+  "base_parameters": 124439808,
+  "device": "cpu",
+  "claim": "A frozen language backbone with a bounded, trained readout of a looped fly-connectome block, plus per-conversation fast weights learned at test time. Not biological language."
+}
